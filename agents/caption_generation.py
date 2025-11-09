@@ -4,9 +4,13 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List
-import random
+import base64
+import json
+import re
 
-from utils.logger import log_error, log_info
+import google.generativeai as genai
+
+from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
 
 
@@ -72,6 +76,18 @@ class CaptionGenerationAgent:
         self.agent_config = config.get('agents', {}).get('caption_generation', {})
         self.model = self.agent_config.get('model', 'gemini')
 
+        # Configure Gemini API
+        if 'gemini' in self.model.lower():
+            self.api_config = config.get('api', {}).get('google', {})
+            self.model_name = self.api_config.get('model', 'gemini-1.5-pro')
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+            else:
+                log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Caption Generation")
+        else:
+            self.api_config = config.get('api', {}).get('openai', {})
+
     def _call_llm_api(
         self,
         image_path: Path,
@@ -81,10 +97,7 @@ class CaptionGenerationAgent:
         category: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Call LLM API for caption generation.
-
-        In production, this would call GPT-4 or Gemini.
-        For demonstration, returns simulated captions.
+        Call Gemini API for caption generation.
 
         Args:
             image_path: Path to image
@@ -96,69 +109,179 @@ class CaptionGenerationAgent:
         Returns:
             Captions dictionary
         """
-        # Check if API key is available based on model
-        if 'gemini' in self.model.lower():
-            api_key = os.getenv('GOOGLE_API_KEY')
-        else:
-            api_key = os.getenv('OPENAI_API_KEY')
+        try:
+            # Read and encode image
+            with open(image_path, 'rb') as f:
+                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
 
-        if api_key and len(api_key) > 10:
-            # Real API call would go here
-            # For OpenAI: from openai import OpenAI
-            # For Google: import google.generativeai as genai
-            pass
+            # Determine media type
+            suffix = image_path.suffix.lower()
+            media_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp'
+            }
+            media_type = media_type_map.get(suffix, 'image/jpeg')
 
-        # Simulated captions for demonstration
-        # In production, LLM would analyze image and generate contextual captions
+            # Build context for captions
+            location = category.get('location', 'the location')
+            time_cat = category.get('time_category', 'daytime')
+            main_cat = category.get('category', 'a scene')
+            subcats = ', '.join(category.get('subcategories', ['visual elements']))
 
-        # Extract info for captions
-        location = category.get('location', 'unknown location')
-        time_cat = category.get('time_category', 'daytime')
-        main_cat = category.get('category', 'scene')
-        camera = metadata.get('camera_settings', {}).get('camera_model', 'camera')
+            # Create prompt for caption generation
+            prompt = f"""{self.SYSTEM_PROMPT}
 
-        # Generate captions
+CONTEXT:
+- Image category: {main_cat}
+- Key elements: {subcats}
+- Time of day: {time_cat}
+- Location: {location}
+- Technical quality score: {quality.get('quality_score', 3)}/5
+- Aesthetic score: {aesthetic.get('overall_aesthetic', 3)}/5
+- Camera: {metadata.get('camera_settings', {}).get('camera_model', 'Professional camera')}
+- Aperture: {metadata.get('camera_settings', {}).get('aperture', 'unknown')}
+- ISO: {metadata.get('camera_settings', {}).get('iso', 'unknown')}
+
+RESPONSE FORMAT: Generate three levels of captions as a JSON object:
+{{
+    "concise": "<1 line, max 100 chars, punchy Twitter-style>",
+    "standard": "<2-3 lines, 150-250 chars, Instagram-style narrative>",
+    "detailed": "<paragraph style, 300-500 chars, editorial depth>",
+    "keywords": ["<keyword1>", "<keyword2>", ...]
+}}
+
+Make captions specific, avoid clichés, and incorporate the actual visual elements."""
+
+            # Call Gemini API with image
+            model = genai.GenerativeModel(self.model_name)
+            response = model.generate_content([
+                prompt,
+                {
+                    "mime_type": media_type,
+                    "data": image_data,
+                }
+            ])
+
+            # Parse response
+            response_text = response.text
+            log_info(self.logger, f"Received Gemini captions for {image_path.name}", "Caption Generation")
+
+            # Extract captions
+            return self._parse_caption_response(response_text)
+
+        except Exception as e:
+            log_error(
+                self.logger,
+                "Caption Generation",
+                "APIError",
+                f"Gemini API call failed for {image_path.name}: {str(e)}",
+                "error"
+            )
+            # Return default captions on API failure
+            return {
+                'captions': {
+                    'concise': 'Travel photograph',
+                    'standard': 'A beautiful travel photograph capturing a memorable moment.',
+                    'detailed': 'This travel photograph documents a moment from a journey, '
+                               'preserving the essence of exploration and discovery.'
+                },
+                'keywords': ['travel', 'photography', 'journey']
+            }
+
+    def _parse_caption_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse Gemini API response to extract captions and keywords.
+
+        Args:
+            response_text: Raw response text from Gemini
+
+        Returns:
+            Dictionary with captions and keywords
+        """
+        try:
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                response_json = json.loads(json_match.group())
+            else:
+                # Fallback if no JSON found
+                response_json = self._extract_captions_from_text(response_text)
+
+            captions = {
+                'concise': response_json.get('concise', 'Travel photograph'),
+                'standard': response_json.get('standard', 'A travel photograph.'),
+                'detailed': response_json.get('detailed', 'A travel photograph.')
+            }
+
+            # Enforce length constraints
+            if len(captions['concise']) > 100:
+                captions['concise'] = captions['concise'][:97] + "..."
+
+            if len(captions['standard']) > 250:
+                captions['standard'] = captions['standard'][:247] + "..."
+
+            if len(captions['detailed']) > 500:
+                captions['detailed'] = captions['detailed'][:497] + "..."
+
+            # Ensure minimum lengths
+            if len(captions['detailed']) < 100:
+                captions['detailed'] = captions['detailed'] + " This photograph captures a unique travel moment."
+
+            keywords = response_json.get('keywords', ['travel', 'photography'])
+            if not isinstance(keywords, list):
+                keywords = ['travel', 'photography']
+
+            return {
+                'captions': captions,
+                'keywords': keywords[:10]  # Limit to 10 keywords
+            }
+
+        except Exception as e:
+            log_warning(self.logger, f"Failed to parse caption response: {str(e)}", "Caption Generation")
+            return {
+                'captions': {
+                    'concise': 'Travel photograph',
+                    'standard': 'A travel photograph capturing a memorable moment.',
+                    'detailed': 'This travel photograph documents a moment from a journey, '
+                               'preserving the essence of exploration and discovery.'
+                },
+                'keywords': ['travel', 'photography', 'journey']
+            }
+
+    def _extract_captions_from_text(self, text: str) -> Dict[str, Any]:
+        """
+        Extract captions from natural language response.
+
+        Args:
+            text: Natural language response text
+
+        Returns:
+            Dictionary with extracted captions
+        """
         captions = {
-            'concise': f"Beautiful {main_cat.lower()} captured during {time_cat.lower()}",
-            'standard': f"This stunning {main_cat.lower()} photograph was taken during "
-                       f"{time_cat.lower()} at {location}. The lighting and composition "
-                       f"create a memorable travel moment worth preserving.",
-            'detailed': f"This {main_cat.lower()} photograph showcases exceptional "
-                       f"travel photography captured during {time_cat.lower()}. "
-                       f"Location: {location}. Shot with {camera}, the image demonstrates "
-                       f"strong technical quality (score: {quality.get('quality_score', 3)}/5) "
-                       f"and aesthetic appeal (score: {aesthetic.get('overall_aesthetic', 3)}/5). "
-                       f"The composition features {', '.join(category.get('subcategories', ['compelling elements']))} "
-                       f"that draw the viewer into the scene. This image represents the "
-                       f"essence of travel photography: capturing a moment in time that "
-                       f"tells a story and evokes emotion."
+            'concise': text.split('\n')[0][:100] if text else 'Travel photograph',
+            'standard': text[:250] if text else 'A travel photograph.',
+            'detailed': text[:500] if text else 'A travel photograph.'
         }
 
-        # Ensure length constraints
-        if len(captions['concise']) > 100:
-            captions['concise'] = captions['concise'][:97] + "..."
+        keywords = []
+        # Try to extract keywords from common patterns
+        if 'keyword' in text.lower():
+            keyword_section = text.lower().split('keyword')[1]
+            words = re.findall(r'\b\w+\b', keyword_section)
+            keywords = words[:10]
 
-        if len(captions['standard']) > 250:
-            captions['standard'] = captions['standard'][:247] + "..."
-
-        if len(captions['detailed']) < 300:
-            # Pad if too short
-            captions['detailed'] += " This photograph preserves a unique travel memory."
-
-        if len(captions['detailed']) > 500:
-            captions['detailed'] = captions['detailed'][:497] + "..."
-
-        # Generate keywords
-        keywords = [
-            main_cat.lower(),
-            time_cat.lower(),
-            'travel',
-            'photography'
-        ] + category.get('subcategories', [])
+        if not keywords:
+            keywords = ['travel', 'photography']
 
         return {
-            'captions': captions,
-            'keywords': keywords[:10]  # Limit to 10 keywords
+            'concise': captions['concise'],
+            'standard': captions['standard'],
+            'detailed': captions['detailed'],
+            'keywords': keywords
         }
 
     def process_image(
