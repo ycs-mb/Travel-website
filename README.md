@@ -32,12 +32,28 @@ This workflow orchestrates a team of world-class AI agents, each expert in a spe
 
 - **Python 3.9+**
 - **Node.js 18+** (for website)
-- **pip** and **npm**
+- **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager (recommended)
+- **npm** (for website)
 - Optional: API keys for Claude/GPT-4 (for production VLM/LLM features)
 
 ## 🚀 Quick Start
 
 ### 1. Installation
+
+**Using uv (Recommended - Fast & Reliable):**
+
+```bash
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install all Python dependencies
+uv sync
+
+# Copy environment template
+cp .env.example .env
+```
+
+**Alternative - Using pip:**
 
 ```bash
 # Install Python dependencies
@@ -59,8 +75,17 @@ cp /path/to/your/photos/*.jpg sample_images/
 
 ### 3. Run the Workflow
 
+**Using uv:**
+
 ```bash
 # Execute the complete workflow
+uv run python orchestrator.py
+```
+
+**Or activate virtual environment first:**
+
+```bash
+source .venv/bin/activate
 python orchestrator.py
 ```
 
@@ -133,9 +158,11 @@ agents:
 
 ## 🚀 Quick Commands
 
+**Using uv:**
+
 ```bash
 # Run workflow
-python orchestrator.py
+uv run python orchestrator.py
 
 # View report
 cat output/reports/final_report.json | jq .
@@ -145,6 +172,19 @@ cd output/website && npm run dev
 
 # Check logs
 tail -f output/logs/workflow.log
+
+# Add new dependency
+uv add package-name
+
+# Update dependencies
+uv sync --upgrade
+```
+
+**Or with activated virtual environment:**
+
+```bash
+source .venv/bin/activate
+python orchestrator.py
 ```
 
 ## 📧 Support

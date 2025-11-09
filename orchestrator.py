@@ -259,11 +259,11 @@ class TravelPhotoOrchestrator:
         Returns:
             Final report dictionary
         """
-        metadata_list = self.outputs.get('metadata', [])
-        quality_list = self.outputs.get('quality', [])
-        aesthetic_list = self.outputs.get('aesthetic', [])
-        duplicates_list = self.outputs.get('duplicates', [])
-        filtering_list = self.outputs.get('filtering', [])
+        metadata_list = self.outputs.get('metadata_extraction', [])
+        quality_list = self.outputs.get('quality_assessment', [])
+        aesthetic_list = self.outputs.get('aesthetic_assessment', [])
+        duplicates_list = self.outputs.get('duplicate_detection', [])
+        filtering_list = self.outputs.get('filtering_categorization', [])
 
         # Calculate statistics
         num_flagged_metadata = sum(
