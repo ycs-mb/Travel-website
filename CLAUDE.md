@@ -112,7 +112,7 @@ config.yaml → TravelPhotoOrchestrator.__init__()
 **config.yaml structure:**
 - `paths`: input_images, output directories (reports, website, logs, metadata)
 - `agents.{agent_name}`: enabled, parallel_workers, batch_size, model, timeout_seconds
-- `api`: Anthropic, OpenAI, Google API settings (model, max_tokens, temperature)
+- `api`: OpenAI, Google API settings (model, max_tokens, temperature)
 - `thresholds`: min_technical_quality (3), min_aesthetic_quality (3), duplicate_hamming_distance (10)
 - `error_handling`: max_retries (3), continue_on_error (true)
 - `logging`: level (INFO), format (json)
@@ -131,9 +131,8 @@ class MyAgent:
 
 ### Environment Variables
 Create `.env` file for API keys (see `.env.example`):
-- `ANTHROPIC_API_KEY` - For Claude 3.5 Sonnet (Agents 3, 5, 6)
-- `OPENAI_API_KEY` - For GPT-4 Vision (alternative for Agents 2, 3)
-- `GOOGLE_API_KEY` - For Gemini (alternative for Agent 6)
+- `OPENAI_API_KEY` - For GPT-4 Vision (Agents 2, 3, 6)
+- `GOOGLE_API_KEY` - For Gemini Vision (Agents 3, 5, 6)
 
 ## Critical Architecture Patterns
 
@@ -331,33 +330,50 @@ Each agent's `run()` method must return:
 
 **Currently Simulated (Production-Ready Structure):**
 - Agents 3, 5, 6 have VLM/LLM integration scaffolding
-- Check `os.getenv('ANTHROPIC_API_KEY')` to detect API keys
+- Check `os.getenv('OPENAI_API_KEY')` or `os.getenv('GOOGLE_API_KEY')` to detect API keys
 - Implement actual API calls in `_call_vlm_api()` or `_call_llm_api()` methods
 
-**Production Implementation Example:**
+**Production Implementation Example (OpenAI):**
 ```python
 # In aesthetic_assessment.py
-from anthropic import Anthropic
+from openai import OpenAI
+import base64
 
 def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
-    client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
     with open(image_path, 'rb') as f:
         image_data = base64.b64encode(f.read()).decode('utf-8')
 
-    response = client.messages.create(
-        model=self.api_config.get('model', 'claude-3-5-sonnet-20241022'),
+    response = client.chat.completions.create(
+        model=self.api_config.get('model', 'gpt-4-vision-preview'),
         max_tokens=self.api_config.get('max_tokens', 4096),
         messages=[{
             "role": "user",
             "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_data}},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
                 {"type": "text", "text": prompt}
             ]
         }]
     )
 
-    return parse_response(response.content[0].text)
+    return parse_response(response.choices[0].message.content)
+```
+
+**Production Implementation Example (Gemini):**
+```python
+# In aesthetic_assessment.py
+import google.generativeai as genai
+from PIL import Image
+
+def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
+    genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+    model = genai.GenerativeModel(self.api_config.get('model', 'gemini-1.5-pro'))
+
+    img = Image.open(image_path)
+    response = model.generate_content([prompt, img])
+
+    return parse_response(response.text)
 ```
 
 ## Performance Considerations
@@ -374,5 +390,5 @@ def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
 - **Image Formats**: Supports .jpg, .jpeg, .png, .heic, .raw, .cr2, .nef, .arw (via Pillow)
 - **GPS Reverse Geocoding**: Currently returns coordinates; production should use geopy or reverse-geocoder
 - **Website Generation**: Creates React structure but not full component code (placeholder for expansion)
-- **Model Selection**: config.yaml allows switching between clip-iqa, gpt4v, claude for each agent
+- **Model Selection**: config.yaml allows switching between clip-iqa, gpt4v, gemini for each agent
 - **Validation Failures**: Logged as warnings but don't stop execution (graceful degradation)
