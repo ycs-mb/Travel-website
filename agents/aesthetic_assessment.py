@@ -58,14 +58,18 @@ class AestheticAssessmentAgent:
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('aesthetic_assessment', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 2)
-        self.model = self.agent_config.get('model', 'claude-3.5-sonnet')
-        self.api_config = config.get('api', {}).get('anthropic', {})
+        self.model = self.agent_config.get('model', 'gpt4v')
+        # Get API config based on model
+        if 'gemini' in self.model.lower():
+            self.api_config = config.get('api', {}).get('google', {})
+        else:
+            self.api_config = config.get('api', {}).get('openai', {})
 
     def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
         """
         Call VLM API for aesthetic assessment.
 
-        In production, this would call Claude 3.5 Sonnet, GPT-4V, or similar.
+        In production, this would call GPT-4V or Gemini Vision.
         For demonstration, this returns simulated responses.
 
         Args:
@@ -75,15 +79,17 @@ class AestheticAssessmentAgent:
         Returns:
             Assessment scores and notes
         """
-        # Check if API key is available
-        api_key = os.getenv('ANTHROPIC_API_KEY')
+        # Check if API key is available based on model
+        if 'gemini' in self.model.lower():
+            api_key = os.getenv('GOOGLE_API_KEY')
+        else:
+            api_key = os.getenv('OPENAI_API_KEY')
 
         if api_key and len(api_key) > 10:
             try:
                 # Real API call would go here
-                # from anthropic import Anthropic
-                # client = Anthropic(api_key=api_key)
-                # response = client.messages.create(...)
+                # For OpenAI: from openai import OpenAI
+                # For Google: import google.generativeai as genai
                 log_info(self.logger, f"VLM API available for {image_path.name}", "Aesthetic Assessment")
             except Exception as e:
                 log_warning(self.logger, f"VLM API call failed: {e}", "Aesthetic Assessment")

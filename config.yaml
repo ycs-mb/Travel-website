@@ -19,13 +19,13 @@ agents:
   quality_assessment:
     enabled: true
     batch_size: 10
-    model: "clip-iqa"  # Options: clip-iqa, gpt4v, claude
+    model: "clip-iqa"  # Options: clip-iqa, gpt4v
     parallel_workers: 2
 
   aesthetic_assessment:
     enabled: true
     batch_size: 5
-    model: "claude-3.5-sonnet"  # Options: claude-3.5-sonnet, gpt4v, nima
+    model: "gpt4v"  # Options: gpt4v, gemini, nima
     parallel_workers: 2
 
   duplicate_detection:
@@ -39,12 +39,12 @@ agents:
     min_technical_score: 3
     min_aesthetic_score: 3
     batch_size: 10
-    model: "claude-3.5-sonnet"
+    model: "gemini"
 
   caption_generation:
     enabled: true
     batch_size: 5
-    model: "claude-3.5-sonnet"  # Options: claude-3.5-sonnet, gpt4, gemini
+    model: "gemini"  # Options: gpt4, gemini
     include_keywords: true
 
   website_generation:
@@ -55,11 +55,6 @@ agents:
 
 # API Configuration (use environment variables for keys)
 api:
-  anthropic:
-    model: "claude-3-5-sonnet-20241022"
-    max_tokens: 4096
-    temperature: 0.7
-
   openai:
     model: "gpt-4-vision-preview"
     max_tokens: 4096
@@ -67,6 +62,7 @@ api:
 
   google:
     model: "gemini-1.5-pro"
+    max_tokens: 4096
     temperature: 0.7
 
 # Quality Thresholds
