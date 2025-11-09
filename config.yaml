@@ -1,0 +1,109 @@
+# Travel Photo Organization Workflow Configuration
+
+# Input/Output Settings
+paths:
+  input_images: "./sample_images"
+  output_dir: "./output"
+  metadata_output: "./output/metadata"
+  reports_output: "./output/reports"
+  website_output: "./output/website"
+  logs_output: "./output/logs"
+
+# Agent Configuration
+agents:
+  metadata_extraction:
+    enabled: true
+    parallel_workers: 4
+    timeout_seconds: 30
+
+  quality_assessment:
+    enabled: true
+    batch_size: 10
+    model: "clip-iqa"  # Options: clip-iqa, gpt4v, claude
+    parallel_workers: 2
+
+  aesthetic_assessment:
+    enabled: true
+    batch_size: 5
+    model: "claude-3.5-sonnet"  # Options: claude-3.5-sonnet, gpt4v, nima
+    parallel_workers: 2
+
+  duplicate_detection:
+    enabled: true
+    hash_threshold: 10
+    embedding_threshold: 0.90
+    model: "clip"  # Options: clip, resnet, vgg
+
+  filtering_categorization:
+    enabled: true
+    min_technical_score: 3
+    min_aesthetic_score: 3
+    batch_size: 10
+    model: "claude-3.5-sonnet"
+
+  caption_generation:
+    enabled: true
+    batch_size: 5
+    model: "claude-3.5-sonnet"  # Options: claude-3.5-sonnet, gpt4, gemini
+    include_keywords: true
+
+  website_generation:
+    enabled: true
+    template: "material-ui"
+    theme: "light"
+    enable_dark_mode: true
+
+# API Configuration (use environment variables for keys)
+api:
+  anthropic:
+    model: "claude-3-5-sonnet-20241022"
+    max_tokens: 4096
+    temperature: 0.7
+
+  openai:
+    model: "gpt-4-vision-preview"
+    max_tokens: 4096
+    temperature: 0.7
+
+  google:
+    model: "gemini-1.5-pro"
+    temperature: 0.7
+
+# Quality Thresholds
+thresholds:
+  duplicate_hamming_distance: 10
+  similarity_cosine_threshold: 0.90
+  min_technical_quality: 3
+  min_aesthetic_quality: 3
+  min_resolution_pixels: 2000000  # 2MP
+  max_noise_threshold: 0.15
+  min_sharpness_variance: 100
+
+# Error Handling
+error_handling:
+  max_retries: 3
+  retry_delay_seconds: 2
+  continue_on_error: true
+  severity_levels: ["info", "warning", "error", "critical"]
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"
+  console_output: true
+  file_output: true
+
+# Parallelization
+parallelization:
+  enable_parallel_agents: true
+  max_workers: 4
+  parallel_groups:
+    - ["quality_assessment", "aesthetic_assessment"]
+    - ["filtering_categorization", "caption_generation"]
+
+# Performance
+performance:
+  cache_embeddings: true
+  cache_dir: "./cache"
+  image_preview_size: [800, 800]
+  thumbnail_size: [200, 200]
