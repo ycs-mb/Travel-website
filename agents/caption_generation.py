@@ -70,7 +70,7 @@ class CaptionGenerationAgent:
         self.config = config
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('caption_generation', {})
-        self.model = self.agent_config.get('model', 'claude-3.5-sonnet')
+        self.model = self.agent_config.get('model', 'gemini')
 
     def _call_llm_api(
         self,
@@ -83,7 +83,7 @@ class CaptionGenerationAgent:
         """
         Call LLM API for caption generation.
 
-        In production, this would call Claude 3.5 Sonnet or GPT-4.
+        In production, this would call GPT-4 or Gemini.
         For demonstration, returns simulated captions.
 
         Args:
@@ -96,11 +96,16 @@ class CaptionGenerationAgent:
         Returns:
             Captions dictionary
         """
-        # Check if API key is available
-        api_key = os.getenv('ANTHROPIC_API_KEY')
+        # Check if API key is available based on model
+        if 'gemini' in self.model.lower():
+            api_key = os.getenv('GOOGLE_API_KEY')
+        else:
+            api_key = os.getenv('OPENAI_API_KEY')
 
         if api_key and len(api_key) > 10:
             # Real API call would go here
+            # For OpenAI: from openai import OpenAI
+            # For Google: import google.generativeai as genai
             pass
 
         # Simulated captions for demonstration
