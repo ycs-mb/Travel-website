@@ -34,9 +34,33 @@ Each agent produces a list of dictionaries (one per image) that flows to downstr
 
 ## Common Commands
 
+### Setup with uv (Recommended)
+
+This project uses **uv** for fast, reliable Python package management.
+
+```bash
+# Install dependencies
+uv sync
+
+# Run the workflow
+uv run python orchestrator.py
+# OR activate the virtual environment first
+source .venv/bin/activate
+python orchestrator.py
+
+# Add new dependencies
+uv add package-name
+
+# Add development dependencies
+uv add --dev package-name
+
+# Update all dependencies
+uv sync --upgrade
+```
+
 ### Run the Complete Workflow
 ```bash
-python orchestrator.py
+uv run python orchestrator.py
 ```
 
 ### View Final Report
@@ -61,6 +85,11 @@ cat output/reports/quality_assessment_output.json | jq .
 ```
 
 ### Test Single Agent (Python REPL)
+```bash
+# Start Python REPL with uv
+uv run python
+```
+
 ```python
 from agents.metadata_extraction import MetadataExtractionAgent
 from utils.helpers import load_config
@@ -77,6 +106,11 @@ print(validation)
 ```
 
 ### Generate Website Only
+```bash
+# Start Python REPL with uv
+uv run python
+```
+
 ```python
 from agents.website_generation import WebsiteGenerationAgent
 from utils.helpers import load_config, load_json
@@ -386,7 +420,7 @@ def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
 
 ## Important Notes
 
-- **Dependencies**: Requires OpenCV, Pillow, imagehash, transformers (see requirements.txt)
+- **Dependencies**: Managed via `uv` and `pyproject.toml`. Install with `uv sync`. See pyproject.toml for full list (OpenCV, Pillow, imagehash, transformers, torch, etc.)
 - **Image Formats**: Supports .jpg, .jpeg, .png, .heic, .raw, .cr2, .nef, .arw (via Pillow)
 - **GPS Reverse Geocoding**: Currently returns coordinates; production should use geopy or reverse-geocoder
 - **Website Generation**: Creates React structure but not full component code (placeholder for expansion)
