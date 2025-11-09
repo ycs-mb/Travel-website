@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import base64
-import random
+import json
+import re
+
+import google.generativeai as genai
 
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
@@ -62,15 +65,19 @@ class AestheticAssessmentAgent:
         # Get API config based on model
         if 'gemini' in self.model.lower():
             self.api_config = config.get('api', {}).get('google', {})
+            self.model_name = self.api_config.get('model', 'gemini-1.5-pro')
+            # Configure Gemini API
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+            else:
+                log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Aesthetic Assessment")
         else:
             self.api_config = config.get('api', {}).get('openai', {})
 
     def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
         """
-        Call VLM API for aesthetic assessment.
-
-        In production, this would call GPT-4V or Gemini Vision.
-        For demonstration, this returns simulated responses.
+        Call Gemini Vision API for aesthetic assessment.
 
         Args:
             image_path: Path to image
@@ -79,45 +86,136 @@ class AestheticAssessmentAgent:
         Returns:
             Assessment scores and notes
         """
-        # Check if API key is available based on model
-        if 'gemini' in self.model.lower():
-            api_key = os.getenv('GOOGLE_API_KEY')
-        else:
-            api_key = os.getenv('OPENAI_API_KEY')
+        try:
+            # Read and encode image
+            with open(image_path, 'rb') as f:
+                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
 
-        if api_key and len(api_key) > 10:
-            try:
-                # Real API call would go here
-                # For OpenAI: from openai import OpenAI
-                # For Google: import google.generativeai as genai
-                log_info(self.logger, f"VLM API available for {image_path.name}", "Aesthetic Assessment")
-            except Exception as e:
-                log_warning(self.logger, f"VLM API call failed: {e}", "Aesthetic Assessment")
+            # Determine media type
+            suffix = image_path.suffix.lower()
+            media_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp'
+            }
+            media_type = media_type_map.get(suffix, 'image/jpeg')
 
-        # Simulated response for demonstration
-        # In production, this would parse actual VLM output
-        random.seed(hash(str(image_path)))  # Deterministic simulation
+            # Call Gemini Vision API
+            model = genai.GenerativeModel(self.model_name)
+            response = model.generate_content([
+                prompt,
+                {
+                    "mime_type": media_type,
+                    "data": image_data,
+                }
+            ])
 
-        assessment = {
-            "composition": random.randint(2, 5),
-            "framing": random.randint(2, 5),
-            "lighting": random.randint(2, 5),
-            "subject_interest": random.randint(2, 5),
-            "notes": f"Simulated aesthetic assessment for {image_path.name}. "
-                    "In production, this would contain detailed VLM analysis of "
-                    "composition, rule of thirds adherence, lighting quality, "
-                    "emotional impact, and artistic merit."
+            # Parse response
+            response_text = response.text
+            log_info(self.logger, f"Received Gemini response for {image_path.name}", "Aesthetic Assessment")
+
+            # Extract JSON from response
+            assessment = self._parse_vlm_response(response_text)
+            return assessment
+
+        except Exception as e:
+            log_error(
+                self.logger,
+                "Aesthetic Assessment",
+                "APIError",
+                f"Gemini API call failed for {image_path.name}: {str(e)}",
+                "error"
+            )
+            # Return default values on API failure
+            return {
+                "composition": 3,
+                "framing": 3,
+                "lighting": 3,
+                "subject_interest": 3,
+                "overall_aesthetic": 3,
+                "notes": f"API error: {str(e)}"
+            }
+
+    def _parse_vlm_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse Gemini Vision API response to extract aesthetic scores.
+
+        Args:
+            response_text: Raw response text from Gemini
+
+        Returns:
+            Dictionary with aesthetic scores
+        """
+        try:
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                response_json = json.loads(json_match.group())
+            else:
+                # If no JSON found, parse the text response
+                response_json = self._extract_scores_from_text(response_text)
+
+            # Ensure all required fields are present
+            assessment = {
+                "composition": int(response_json.get("composition", 3)),
+                "framing": int(response_json.get("framing", 3)),
+                "lighting": int(response_json.get("lighting", 3)),
+                "subject_interest": int(response_json.get("subject_interest", 3)),
+                "notes": response_json.get("notes", response_text[:200])
+            }
+
+            # Clamp scores to 1-5 range
+            for key in ["composition", "framing", "lighting", "subject_interest"]:
+                assessment[key] = max(1, min(5, assessment[key]))
+
+            # Calculate overall aesthetic as weighted average
+            assessment["overall_aesthetic"] = int(round(
+                (assessment["composition"] * 0.30 +
+                 assessment["framing"] * 0.25 +
+                 assessment["lighting"] * 0.25 +
+                 assessment["subject_interest"] * 0.20)
+            ))
+
+            return assessment
+
+        except Exception as e:
+            log_warning(self.logger, f"Failed to parse VLM response: {str(e)}", "Aesthetic Assessment")
+            return {
+                "composition": 3,
+                "framing": 3,
+                "lighting": 3,
+                "subject_interest": 3,
+                "overall_aesthetic": 3,
+                "notes": f"Parse error: {str(e)}"
+            }
+
+    def _extract_scores_from_text(self, text: str) -> Dict[str, Any]:
+        """
+        Extract scores from natural language response.
+
+        Args:
+            text: Natural language response text
+
+        Returns:
+            Dictionary with extracted scores
+        """
+        scores = {}
+        score_patterns = {
+            "composition": r"composition[:\s]*(\d)",
+            "framing": r"framing[:\s]*(\d)",
+            "lighting": r"lighting[:\s]*(\d)",
+            "subject_interest": r"subject.?interest[:\s]*(\d)"
         }
 
-        # Calculate overall aesthetic as weighted average
-        assessment["overall_aesthetic"] = int(round(
-            (assessment["composition"] * 0.30 +
-             assessment["framing"] * 0.25 +
-             assessment["lighting"] * 0.25 +
-             assessment["subject_interest"] * 0.20)
-        ))
+        for key, pattern in score_patterns.items():
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                scores[key] = int(match.group(1))
 
-        return assessment
+        scores["notes"] = text[:200]
+        return scores
 
     def assess_with_vlm(self, image_path: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -132,25 +230,37 @@ class AestheticAssessmentAgent:
         """
         try:
             # Construct detailed prompt for VLM
-            prompt = f"""
-            {self.SYSTEM_PROMPT}
+            gps = metadata.get('gps', {})
+            location = f"{gps.get('latitude', 'unknown')}, {gps.get('longitude', 'unknown')}"
 
-            Analyze this travel photograph and provide scores (1-5) for:
-            1. Composition
-            2. Framing
-            3. Lighting Quality
-            4. Subject Interest
-            5. Overall Aesthetic
+            prompt = f"""{self.SYSTEM_PROMPT}
 
-            Also provide brief notes on artistic merit and recommendations.
+TASK: Analyze this travel photograph and provide aesthetic assessment scores.
 
-            Image metadata:
-            - Capture time: {metadata.get('capture_datetime', 'unknown')}
-            - Location: {metadata.get('gps', {}).get('latitude', 'unknown')}
-            - Camera: {metadata.get('camera_settings', {}).get('camera_model', 'unknown')}
+Evaluate the image across these dimensions:
+1. Composition (1-5): Rule of thirds, leading lines, balance, golden ratio
+2. Framing (1-5): Subject placement, negative space, cropping effectiveness
+3. Lighting Quality (1-5): Direction, color temperature, mood, golden/blue hour quality
+4. Subject Interest (1-5): Uniqueness, emotional impact, storytelling potential
 
-            Respond with a JSON object containing the scores and notes.
-            """
+Image metadata:
+- Capture time: {metadata.get('capture_datetime', 'unknown')}
+- Location: {location}
+- Camera: {metadata.get('camera_settings', {}).get('camera_model', 'unknown')}
+- ISO: {metadata.get('camera_settings', {}).get('iso', 'unknown')}
+- Aperture: {metadata.get('camera_settings', {}).get('aperture', 'unknown')}
+- Focal length: {metadata.get('camera_settings', {}).get('focal_length', 'unknown')}
+
+RESPONSE FORMAT: Provide your response as a JSON object with this exact structure:
+{{
+    "composition": <1-5>,
+    "framing": <1-5>,
+    "lighting": <1-5>,
+    "subject_interest": <1-5>,
+    "notes": "<brief analysis of aesthetic strengths and weaknesses>"
+}}
+
+Be specific and reference the actual visual elements you observe in the photograph."""
 
             # Call VLM API
             assessment = self._call_vlm_api(image_path, prompt)
