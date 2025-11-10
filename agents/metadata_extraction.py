@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 import piexif
+from geopy.geocoders import Nominatim
 
 from utils.logger import log_error, log_info
 from utils.validation import validate_agent_output, create_validation_summary
@@ -61,13 +62,100 @@ class MetadataExtractionAgent:
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('metadata_extraction', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 4)
+        # Initialize geocoder for reverse geocoding
+        self.geolocator = Nominatim(user_agent="travel-photo-workflow")
+
+    def _dms_to_decimal(self, degrees: float, minutes: float, seconds: float) -> float:
+        """
+        Convert degrees, minutes, seconds to decimal degrees.
+
+        Args:
+            degrees: Degree value
+            minutes: Minute value
+            seconds: Second value
+
+        Returns:
+            Decimal degrees
+        """
+        return degrees + minutes / 60.0 + seconds / 3600.0
+
+    def _get_location_address(self, latitude: float, longitude: float) -> Optional[str]:
+        """
+        Get location address from coordinates using reverse geocoding.
+
+        Args:
+            latitude: Latitude coordinate
+            longitude: Longitude coordinate
+
+        Returns:
+            Location address or None
+        """
+        try:
+            location = self.geolocator.reverse((latitude, longitude), exactly_one=True, language='en', timeout=10)
+            return location.address if location else None
+        except Exception as e:
+            self.logger.warning(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
+            return None
+
+    def _extract_image_gps(self, image_path: Path) -> Optional[tuple]:
+        """
+        Extract GPS coordinates from image EXIF data using PIL.
+
+        This is an alternative extraction method that directly parses EXIF GPS data.
+
+        Args:
+            image_path: Path to image file
+
+        Returns:
+            Tuple of (lat_dms, lon_dms, lat_ref, lon_ref) or None
+        """
+        try:
+            img = Image.open(image_path)
+            exif = img._getexif()
+
+            if not exif:
+                return None
+
+            gps_info = {}
+            for tag_id, value in exif.items():
+                tag = TAGS.get(tag_id, tag_id)
+                if tag == 'GPSInfo':
+                    for gps_tag in value:
+                        sub_tag = GPSTAGS.get(gps_tag, gps_tag)
+                        gps_info[sub_tag] = value[gps_tag]
+
+            if not gps_info:
+                return None
+
+            # Check if we have the required GPS tags
+            if 'GPSLatitude' not in gps_info or 'GPSLongitude' not in gps_info:
+                return None
+
+            # Extract latitude and longitude in DMS format
+            lat_dms = (float(gps_info['GPSLatitude'][0]),
+                       float(gps_info['GPSLatitude'][1]),
+                       float(gps_info['GPSLatitude'][2]))
+
+            lon_dms = (float(gps_info['GPSLongitude'][0]),
+                       float(gps_info['GPSLongitude'][1]),
+                       float(gps_info['GPSLongitude'][2]))
+
+            lat_ref = gps_info.get('GPSLatitudeRef', 'N')
+            lon_ref = gps_info.get('GPSLongitudeRef', 'E')
+
+            return lat_dms, lon_dms, lat_ref, lon_ref
+
+        except Exception as e:
+            self.logger.warning(f"Error extracting GPS data with _extract_image_gps: {e}")
+            return None
 
     def extract_gps_info(self, exif_data: Dict) -> Dict[str, Optional[float]]:
-        """Extract GPS coordinates from EXIF data."""
+        """Extract GPS coordinates from EXIF data with reverse geocoding."""
         gps_info = {
             "latitude": None,
             "longitude": None,
-            "altitude": None
+            "altitude": None,
+            "location": None
         }
 
         if 'GPS' not in exif_data:
@@ -80,27 +168,65 @@ class MetadataExtractionAgent:
             if 'GPSLatitude' in gps and 'GPSLatitudeRef' in gps:
                 lat = gps['GPSLatitude']
                 lat_ref = gps['GPSLatitudeRef']
-                latitude = self._convert_to_degrees(lat)
-                if lat_ref == 'S':
-                    latitude = -latitude
-                gps_info['latitude'] = latitude
+
+                # Convert DMS to decimal using proper method
+                try:
+                    # Handle both tuple and regular number formats
+                    if isinstance(lat[0], (tuple, list)):
+                        lat_deg = lat[0][0] / lat[0][1] if lat[0][1] != 0 else lat[0][0]
+                        lat_min = lat[1][0] / lat[1][1] if lat[1][1] != 0 else lat[1][0]
+                        lat_sec = lat[2][0] / lat[2][1] if lat[2][1] != 0 else lat[2][0]
+                    else:
+                        lat_deg, lat_min, lat_sec = lat[0], lat[1], lat[2]
+
+                    latitude = self._dms_to_decimal(float(lat_deg), float(lat_min), float(lat_sec))
+                    if lat_ref == 'S':
+                        latitude = -latitude
+                    gps_info['latitude'] = round(latitude, 6)
+                except Exception as e:
+                    self.logger.warning(f"Error converting latitude: {e}")
 
             # Extract longitude
             if 'GPSLongitude' in gps and 'GPSLongitudeRef' in gps:
                 lon = gps['GPSLongitude']
                 lon_ref = gps['GPSLongitudeRef']
-                longitude = self._convert_to_degrees(lon)
-                if lon_ref == 'W':
-                    longitude = -longitude
-                gps_info['longitude'] = longitude
+
+                try:
+                    # Handle both tuple and regular number formats
+                    if isinstance(lon[0], (tuple, list)):
+                        lon_deg = lon[0][0] / lon[0][1] if lon[0][1] != 0 else lon[0][0]
+                        lon_min = lon[1][0] / lon[1][1] if lon[1][1] != 0 else lon[1][0]
+                        lon_sec = lon[2][0] / lon[2][1] if lon[2][1] != 0 else lon[2][0]
+                    else:
+                        lon_deg, lon_min, lon_sec = lon[0], lon[1], lon[2]
+
+                    longitude = self._dms_to_decimal(float(lon_deg), float(lon_min), float(lon_sec))
+                    if lon_ref == 'W':
+                        longitude = -longitude
+                    gps_info['longitude'] = round(longitude, 6)
+                except Exception as e:
+                    self.logger.warning(f"Error converting longitude: {e}")
 
             # Extract altitude
             if 'GPSAltitude' in gps:
-                alt = gps['GPSAltitude']
-                if isinstance(alt, tuple):
-                    gps_info['altitude'] = alt[0] / alt[1] if alt[1] != 0 else alt[0]
-                else:
-                    gps_info['altitude'] = float(alt)
+                try:
+                    alt = gps['GPSAltitude']
+                    if isinstance(alt, (tuple, list)):
+                        gps_info['altitude'] = round(alt[0] / alt[1] if alt[1] != 0 else alt[0], 2)
+                    else:
+                        gps_info['altitude'] = round(float(alt), 2)
+                except Exception as e:
+                    self.logger.warning(f"Error extracting altitude: {e}")
+
+            # Get location address from coordinates using reverse geocoding
+            if gps_info['latitude'] is not None and gps_info['longitude'] is not None:
+                try:
+                    location = self._get_location_address(gps_info['latitude'], gps_info['longitude'])
+                    if location:
+                        gps_info['location'] = location
+                        self.logger.info(f"Reverse geocoding found: {location}")
+                except Exception as e:
+                    self.logger.warning(f"Error performing reverse geocoding: {e}")
 
         except Exception as e:
             self.logger.warning(f"Error extracting GPS data: {e}")
@@ -207,28 +333,61 @@ class MetadataExtractionAgent:
             # Basic file info
             file_size = image_path.stat().st_size
 
-            # Open image and get EXIF
+            # Open image and get basic info
             with Image.open(image_path) as img:
                 width, height = img.size
                 img_format = img.format
 
-                # Extract EXIF data
+                # Try to extract EXIF data using PIL first
                 exif_data = img.getexif()
 
+                # If PIL fails, try using piexif
+                if not exif_data:
+                    try:
+                        exif_dict = piexif.load(str(image_path))
+                        # Convert piexif format to standard format
+                        for ifd_name in ("0th", "Exif", "GPS", "1st"):
+                            ifd = exif_dict[ifd_name]
+                            for tag_id, value in ifd.items():
+                                tag_name = piexif.TAGS[ifd_name][tag_id]["name"]
+                                try:
+                                    if isinstance(value, bytes):
+                                        value = value.decode('utf-8', errors='ignore')
+                                    exif_raw[tag_name] = str(value)[:200]
+                                except Exception:
+                                    exif_raw[tag_name] = str(value)[:200]
+                    except Exception as e:
+                        self.logger.warning(f"piexif extraction failed for {image_path.name}: {e}")
+
+                # Process PIL EXIF data
                 if exif_data:
                     # Convert EXIF to readable format
                     for tag_id, value in exif_data.items():
                         tag = TAGS.get(tag_id, tag_id)
-                        exif_raw[tag] = str(value)[:100]  # Limit string length
 
-                        # Handle GPS data separately
-                        if tag == 'GPSInfo':
-                            gps_data = {}
-                            for gps_tag_id, gps_value in value.items():
-                                gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
-                                gps_data[gps_tag] = gps_value
-                            exif_raw['GPS'] = gps_data
-                else:
+                        try:
+                            # Handle different value types
+                            if isinstance(value, bytes):
+                                try:
+                                    value = value.decode('utf-8', errors='ignore')
+                                except Exception:
+                                    value = str(value)[:100]
+                            else:
+                                value = str(value)[:200]
+
+                            exif_raw[tag] = value
+
+                            # Handle GPS data separately
+                            if tag == 'GPSInfo':
+                                gps_data = {}
+                                for gps_tag_id, gps_value in value.items():
+                                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                                    gps_data[gps_tag] = gps_value
+                                exif_raw['GPS'] = gps_data
+                        except Exception as e:
+                            self.logger.warning(f"Error processing EXIF tag {tag}: {e}")
+
+                if not exif_data and not exif_raw:
                     flags.append("missing_exif")
                     log_error(
                         self.logger,
@@ -240,6 +399,32 @@ class MetadataExtractionAgent:
 
             # Extract structured metadata
             gps_info = self.extract_gps_info(exif_raw)
+
+            # If GPS extraction from exif_raw failed, try direct PIL extraction
+            if not any(gps_info.values()):
+                try:
+                    gps_extraction = self._extract_image_gps(image_path)
+                    if gps_extraction:
+                        lat_dms, lon_dms, lat_ref, lon_ref = gps_extraction
+                        # Convert DMS to decimal
+                        latitude = self._dms_to_decimal(lat_dms[0], lat_dms[1], lat_dms[2])
+                        longitude = self._dms_to_decimal(lon_dms[0], lon_dms[1], lon_dms[2])
+                        if lat_ref == 'S':
+                            latitude = -latitude
+                        if lon_ref == 'W':
+                            longitude = -longitude
+                        # Get location address
+                        location = self._get_location_address(latitude, longitude)
+                        gps_info = {
+                            'latitude': round(latitude, 6),
+                            'longitude': round(longitude, 6),
+                            'altitude': None,
+                            'location': location
+                        }
+                        self.logger.info(f"GPS data extracted using PIL method for {image_path.name}")
+                except Exception as e:
+                    self.logger.warning(f"PIL GPS extraction fallback failed for {image_path.name}: {e}")
+
             camera_settings = self.extract_camera_settings(exif_raw)
             capture_datetime = self.extract_datetime(exif_raw)
 
@@ -297,7 +482,7 @@ class MetadataExtractionAgent:
                 "format": "unknown",
                 "dimensions": {"width": 0, "height": 0},
                 "capture_datetime": None,
-                "gps": {"latitude": None, "longitude": None, "altitude": None},
+                "gps": {"latitude": None, "longitude": None, "altitude": None, "location": None},
                 "camera_settings": {},
                 "exif_raw": {},
                 "flags": ["processing_error"]

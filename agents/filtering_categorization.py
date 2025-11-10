@@ -1,11 +1,16 @@
 """Agent 5: Filtering and Categorization - Filter and categorize images."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List
-import random
+import base64
+import json
+import re
 
-from utils.logger import log_error, log_info
+import google.generativeai as genai
+
+from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
 
 
@@ -76,6 +81,16 @@ class FilteringCategorizationAgent:
         self.min_technical = self.agent_config.get('min_technical_score', 3)
         self.min_aesthetic = self.agent_config.get('min_aesthetic_score', 3)
 
+        # Configure Gemini API
+        self.api_config = config.get('api', {}).get('google', {})
+        self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
+
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if api_key:
+            genai.configure(api_key=api_key)
+        else:
+            log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Filtering & Categorization")
+
     def categorize_by_time(self, metadata: Dict[str, Any]) -> str:
         """Categorize image by time of day from metadata."""
         datetime_str = metadata.get('capture_datetime')
@@ -116,10 +131,7 @@ class FilteringCategorizationAgent:
 
     def categorize_by_content(self, image_path: Path) -> tuple[str, List[str]]:
         """
-        Categorize image by content using VLM.
-
-        In production, this would use Claude/GPT-4V for scene classification.
-        For demo, returns simulated categories.
+        Categorize image by content using Gemini Vision API.
 
         Args:
             image_path: Path to image
@@ -127,20 +139,133 @@ class FilteringCategorizationAgent:
         Returns:
             Tuple of (main_category, subcategories)
         """
-        # Simulated categorization
-        random.seed(hash(str(image_path)))
+        try:
+            # Read and encode image
+            with open(image_path, 'rb') as f:
+                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
 
-        # Pick a main category
-        categories = list(self.CATEGORIES.keys())
-        main_category = random.choice(categories)
+            # Determine media type
+            suffix = image_path.suffix.lower()
+            media_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp'
+            }
+            media_type = media_type_map.get(suffix, 'image/jpeg')
 
-        # Pick 1-2 subcategories
-        subcategories = random.sample(
-            self.CATEGORIES[main_category],
-            k=min(2, len(self.CATEGORIES[main_category]))
-        )
+            # Create prompt for categorization
+            categories_list = ', '.join(self.CATEGORIES.keys())
+            prompt = f"""{self.SYSTEM_PROMPT}
 
-        return main_category, subcategories
+TASK: Analyze this travel photograph and categorize it.
+
+Valid main categories: {categories_list}
+
+RESPONSE FORMAT: Provide response as a JSON object:
+{{
+    "main_category": "<one of the valid categories>",
+    "subcategories": ["<subcategory1>", "<subcategory2>"]
+}}
+
+Choose the most appropriate main category and provide 1-2 specific subcategories that describe elements visible in the image.
+Focus on travel photography context: sense of place, cultural elements, activity type."""
+
+            # Call Gemini API
+            model = genai.GenerativeModel(self.model_name)
+            response = model.generate_content([
+                prompt,
+                {
+                    "mime_type": media_type,
+                    "data": image_data,
+                }
+            ])
+
+            # Parse response
+            response_text = response.text
+            log_info(self.logger, f"Received Gemini categorization for {image_path.name}", "Filtering & Categorization")
+
+            # Extract JSON from response
+            return self._parse_categorization_response(response_text)
+
+        except Exception as e:
+            log_error(
+                self.logger,
+                "Filtering & Categorization",
+                "APIError",
+                f"Gemini API call failed for {image_path.name}: {str(e)}",
+                "error"
+            )
+            # Return default category on failure
+            return "Uncategorized", []
+
+    def _parse_categorization_response(self, response_text: str) -> tuple[str, List[str]]:
+        """
+        Parse Gemini API response to extract category information.
+
+        Args:
+            response_text: Raw response text from Gemini
+
+        Returns:
+            Tuple of (main_category, subcategories)
+        """
+        try:
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                response_json = json.loads(json_match.group())
+            else:
+                # Fallback if no JSON found
+                response_json = self._extract_categories_from_text(response_text)
+
+            main_category = response_json.get("main_category", "Uncategorized")
+            subcategories = response_json.get("subcategories", [])
+
+            # Validate main category is in our list
+            valid_categories = list(self.CATEGORIES.keys())
+            if main_category not in valid_categories:
+                main_category = "Uncategorized"
+
+            return main_category, subcategories
+
+        except Exception as e:
+            log_warning(self.logger, f"Failed to parse categorization response: {str(e)}", "Filtering & Categorization")
+            return "Uncategorized", []
+
+    def _extract_categories_from_text(self, text: str) -> Dict[str, Any]:
+        """
+        Extract categories from natural language response.
+
+        Args:
+            text: Natural language response text
+
+        Returns:
+            Dictionary with extracted categories
+        """
+        categories = {}
+
+        # Try to find category keywords in text
+        valid_categories = list(self.CATEGORIES.keys())
+        for cat in valid_categories:
+            if cat.lower() in text.lower():
+                categories["main_category"] = cat
+                break
+
+        if "main_category" not in categories:
+            categories["main_category"] = "Uncategorized"
+
+        # Extract keywords as subcategories
+        words = text.lower().split()
+        subcategories = []
+        for word in words:
+            for cat, keywords in self.CATEGORIES.items():
+                if word in keywords:
+                    subcategories.append(word)
+
+        categories["subcategories"] = list(set(subcategories))[:2]
+
+        return categories
 
     def process_image(
         self,

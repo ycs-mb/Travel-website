@@ -84,9 +84,15 @@ ls output/reports/
 cat output/reports/quality_assessment_output.json | jq .
 ```
 
-### Test Single Agent (Python REPL)
+### Run Individual Agents with Images
+
+Each agent can be tested independently with image inputs. Below are Python REPL examples for agents that can process images directly.
+
+#### Agent 1: Metadata Extraction
+Extract EXIF metadata, GPS coordinates, camera settings from images.
+
+**Python REPL:**
 ```bash
-# Start Python REPL with uv
 uv run python
 ```
 
@@ -100,10 +106,290 @@ config = load_config("config.yaml")
 logger = setup_logger()
 agent = MetadataExtractionAgent(config, logger)
 
-image_paths = [Path("sample_images/test.jpg")]
+# Process images
+image_paths = [Path("sample_images/photo1.jpg"), Path("sample_images/photo2.jpg")]
 metadata_list, validation = agent.run(image_paths)
-print(validation)
+
+# View results
+print(f"Status: {validation['status']}")
+print(f"Summary: {validation['summary']}")
+for metadata in metadata_list:
+    print(f"\nImage: {metadata['filename']}")
+    print(f"  GPS: {metadata['gps']}")
+    print(f"  Camera: {metadata['camera_settings']}")
+    print(f"  DateTime: {metadata['capture_datetime']}")
 ```
+
+**Output:** Metadata with GPS coordinates (including reverse-geocoded location), camera settings, EXIF data
+
+---
+
+#### Agent 2: Quality Assessment
+Evaluate technical quality (sharpness, exposure, noise) of images.
+
+**Python REPL:**
+```bash
+uv run python
+```
+
+```python
+from agents.quality_assessment import QualityAssessmentAgent
+from agents.metadata_extraction import MetadataExtractionAgent
+from utils.helpers import load_config
+from utils.logger import setup_logger
+from pathlib import Path
+
+config = load_config("config.yaml")
+logger = setup_logger()
+
+# Agent 2 depends on Agent 1 output
+metadata_agent = MetadataExtractionAgent(config, logger)
+image_paths = [Path("sample_images/photo1.jpg"), Path("sample_images/photo2.jpg")]
+metadata_list, _ = metadata_agent.run(image_paths)
+
+# Run quality assessment
+quality_agent = QualityAssessmentAgent(config, logger)
+quality_list, validation = quality_agent.run(image_paths, metadata_list)
+
+# View results
+print(f"Status: {validation['status']}")
+for quality in quality_list:
+    print(f"\nImage: {quality['image_id']}")
+    print(f"  Quality Score: {quality['quality_score']}/5")
+    print(f"  Sharpness: {quality['sharpness']}")
+    print(f"  Exposure: {quality['exposure']}")
+    print(f"  Noise: {quality['noise_level']}")
+```
+
+**Output:** Quality scores (1-5), sharpness, exposure, noise analysis
+
+---
+
+#### Agent 3: Aesthetic Assessment
+Evaluate artistic quality (composition, framing, lighting) of images using Gemini Vision API.
+
+**Python REPL:**
+```bash
+uv run python
+```
+
+```python
+from agents.aesthetic_assessment import AestheticAssessmentAgent
+from agents.metadata_extraction import MetadataExtractionAgent
+from utils.helpers import load_config
+from utils.logger import setup_logger
+from pathlib import Path
+
+config = load_config("config.yaml")
+logger = setup_logger()
+
+# Agent 3 depends on Agent 1 output
+metadata_agent = MetadataExtractionAgent(config, logger)
+image_paths = [Path("sample_images/photo1.jpg"), Path("sample_images/photo2.jpg")]
+metadata_list, _ = metadata_agent.run(image_paths)
+
+# Run aesthetic assessment (requires GOOGLE_API_KEY environment variable)
+aesthetic_agent = AestheticAssessmentAgent(config, logger)
+aesthetic_list, validation = aesthetic_agent.run(image_paths, metadata_list)
+
+# View results
+print(f"Status: {validation['status']}")
+for aesthetic in aesthetic_list:
+    print(f"\nImage: {aesthetic['image_id']}")
+    print(f"  Overall Aesthetic: {aesthetic['overall_aesthetic']}/5")
+    print(f"  Composition: {aesthetic['composition']}/5")
+    print(f"  Framing: {aesthetic['framing']}/5")
+    print(f"  Lighting: {aesthetic['lighting']}/5")
+    print(f"  Notes: {aesthetic['notes']}")
+```
+
+**Output:** Aesthetic scores (1-5) for composition, framing, lighting, subject interest; overall assessment
+
+---
+
+#### Agent 5: Filtering & Categorization
+Categorize images by content, time, location and filter by quality thresholds using Gemini Vision API.
+
+**Python REPL:**
+```bash
+uv run python
+```
+
+```python
+from agents.filtering_categorization import FilteringCategorizationAgent
+from agents.metadata_extraction import MetadataExtractionAgent
+from agents.quality_assessment import QualityAssessmentAgent
+from agents.aesthetic_assessment import AestheticAssessmentAgent
+from utils.helpers import load_config
+from utils.logger import setup_logger
+from pathlib import Path
+
+config = load_config("config.yaml")
+logger = setup_logger()
+
+# Run prerequisite agents
+image_paths = [Path("sample_images/photo1.jpg"), Path("sample_images/photo2.jpg")]
+metadata_agent = MetadataExtractionAgent(config, logger)
+metadata_list, _ = metadata_agent.run(image_paths)
+
+quality_agent = QualityAssessmentAgent(config, logger)
+quality_list, _ = quality_agent.run(image_paths, metadata_list)
+
+aesthetic_agent = AestheticAssessmentAgent(config, logger)
+aesthetic_list, _ = aesthetic_agent.run(image_paths, metadata_list)
+
+# Run filtering & categorization
+filtering_agent = FilteringCategorizationAgent(config, logger)
+categories, validation = filtering_agent.run(image_paths, metadata_list, quality_list, aesthetic_list)
+
+# View results
+print(f"Status: {validation['status']}")
+for cat in categories:
+    print(f"\nImage: {cat['image_id']}")
+    print(f"  Category: {cat['category']}")
+    print(f"  Subcategories: {cat['subcategories']}")
+    print(f"  Time: {cat['time_category']}")
+    print(f"  Location: {cat['location']}")
+    print(f"  Passes Filter: {cat['passes_filter']}")
+    if cat['flags']:
+        print(f"  Flags: {cat['flags']}")
+```
+
+**Output:** Image categories, subcategories, time classification, location, pass/fail filter status
+
+---
+
+#### Agent 6: Caption Generation
+Generate multi-level captions (concise/standard/detailed) for images using Gemini API.
+
+**Python REPL:**
+```bash
+uv run python
+```
+
+```python
+from agents.caption_generation import CaptionGenerationAgent
+from agents.metadata_extraction import MetadataExtractionAgent
+from agents.quality_assessment import QualityAssessmentAgent
+from agents.aesthetic_assessment import AestheticAssessmentAgent
+from agents.filtering_categorization import FilteringCategorizationAgent
+from utils.helpers import load_config
+from utils.logger import setup_logger
+from pathlib import Path
+
+config = load_config("config.yaml")
+logger = setup_logger()
+
+# Run prerequisite agents
+image_paths = [Path("sample_images/photo1.jpg"), Path("sample_images/photo2.jpg")]
+metadata_agent = MetadataExtractionAgent(config, logger)
+metadata_list, _ = metadata_agent.run(image_paths)
+
+quality_agent = QualityAssessmentAgent(config, logger)
+quality_list, _ = quality_agent.run(image_paths, metadata_list)
+
+aesthetic_agent = AestheticAssessmentAgent(config, logger)
+aesthetic_list, _ = aesthetic_agent.run(image_paths, metadata_list)
+
+filtering_agent = FilteringCategorizationAgent(config, logger)
+categories, _ = filtering_agent.run(image_paths, metadata_list, quality_list, aesthetic_list)
+
+# Run caption generation
+caption_agent = CaptionGenerationAgent(config, logger)
+captions, validation = caption_agent.run(image_paths, metadata_list, quality_list, aesthetic_list, categories)
+
+# View results
+print(f"Status: {validation['status']}")
+for caption in captions:
+    print(f"\nImage: {caption['image_id']}")
+    print(f"  Concise: {caption['captions']['concise']}")
+    print(f"  Standard: {caption['captions']['standard']}")
+    print(f"  Detailed: {caption['captions']['detailed']}")
+    print(f"  Keywords: {caption['keywords']}")
+```
+
+**Output:** Three-level captions (concise/standard/detailed), keywords for searchability
+
+---
+
+### Run All Agents with Image Input Script
+
+For convenience, create a Python script to process images through multiple agents at once:
+
+**File: `run_agents.py`**
+```python
+#!/usr/bin/env python3
+"""Run multiple agents on image directory."""
+
+from pathlib import Path
+from utils.helpers import load_config, get_image_files, save_json
+from utils.logger import setup_logger
+from agents.metadata_extraction import MetadataExtractionAgent
+from agents.quality_assessment import QualityAssessmentAgent
+from agents.aesthetic_assessment import AestheticAssessmentAgent
+from agents.filtering_categorization import FilteringCategorizationAgent
+from agents.caption_generation import CaptionGenerationAgent
+
+def main():
+    config = load_config("config.yaml")
+    logger = setup_logger()
+
+    # Get images
+    input_dir = Path(config['paths']['input_images'])
+    image_paths = get_image_files(input_dir)
+    print(f"Found {len(image_paths)} images")
+
+    # Agent 1: Metadata
+    print("\n→ Extracting metadata...")
+    metadata_agent = MetadataExtractionAgent(config, logger)
+    metadata_list, val1 = metadata_agent.run(image_paths)
+    print(f"  {val1['summary']}")
+
+    # Agent 2: Quality
+    print("\n→ Assessing quality...")
+    quality_agent = QualityAssessmentAgent(config, logger)
+    quality_list, val2 = quality_agent.run(image_paths, metadata_list)
+    print(f"  {val2['summary']}")
+
+    # Agent 3: Aesthetic
+    print("\n→ Assessing aesthetics...")
+    aesthetic_agent = AestheticAssessmentAgent(config, logger)
+    aesthetic_list, val3 = aesthetic_agent.run(image_paths, metadata_list)
+    print(f"  {val3['summary']}")
+
+    # Agent 5: Categorization
+    print("\n→ Categorizing images...")
+    filtering_agent = FilteringCategorizationAgent(config, logger)
+    categories, val5 = filtering_agent.run(image_paths, metadata_list, quality_list, aesthetic_list)
+    print(f"  {val5['summary']}")
+
+    # Agent 6: Captions
+    print("\n→ Generating captions...")
+    caption_agent = CaptionGenerationAgent(config, logger)
+    captions, val6 = caption_agent.run(image_paths, metadata_list, quality_list, aesthetic_list, categories)
+    print(f"  {val6['summary']}")
+
+    # Save results
+    output_dir = Path("agent_outputs")
+    output_dir.mkdir(exist_ok=True)
+    save_json(metadata_list, output_dir / "metadata.json")
+    save_json(quality_list, output_dir / "quality.json")
+    save_json(aesthetic_list, output_dir / "aesthetic.json")
+    save_json(categories, output_dir / "categories.json")
+    save_json(captions, output_dir / "captions.json")
+
+    print(f"\n✓ Results saved to {output_dir}")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Run it:**
+```bash
+uv run python run_agents.py
+```
+
+---
 
 ### Generate Website Only
 ```bash
