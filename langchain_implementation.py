@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import base64
 import json
 
+from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
@@ -259,6 +260,9 @@ class LangChainAestheticAgent:
         self.agent_config = config.get('agents', {}).get('aesthetic_assessment', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 2)
 
+        # Load environment variables from .env file
+        load_dotenv()
+
         # Initialize LangChain VLM
         api_key = os.getenv('GOOGLE_API_KEY')
         if not api_key:
@@ -383,6 +387,9 @@ class LangChainCaptionAgent:
         self.config = config
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('caption_generation', {})
+
+        # Load environment variables from .env file
+        load_dotenv()
 
         # Initialize LangChain LLM
         api_key = os.getenv('GOOGLE_API_KEY')
@@ -574,6 +581,9 @@ class LangChainOrchestrator:
 
 def main():
     """Main entry point for LangChain implementation."""
+    # Load environment variables from .env file
+    load_dotenv()
+
     print("\n" + "=" * 80)
     print("LANGCHAIN IMPLEMENTATION - Travel Photo Organization")
     print("=" * 80 + "\n")

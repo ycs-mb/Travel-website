@@ -13,6 +13,7 @@ from datetime import datetime
 import operator
 import base64
 
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage
@@ -185,6 +186,9 @@ def aesthetic_assessment_node(state: WorkflowState) -> WorkflowState:
     """
     print("\n[LangGraph] Stage 2b: Aesthetic Assessment")
 
+    # Load environment variables from .env file
+    load_dotenv()
+
     config = state["config"]
     metadata_list = state["metadata_list"]
     image_paths = state["image_paths"]
@@ -354,6 +358,9 @@ def caption_generation_node(state: WorkflowState) -> WorkflowState:
     Final processing node that synthesizes information from all prior agents.
     """
     print("\n[LangGraph] Stage 4: Caption Generation")
+
+    # Load environment variables from .env file
+    load_dotenv()
 
     config = state["config"]
     metadata_list = state["metadata_list"]
@@ -699,6 +706,9 @@ class LangGraphOrchestrator:
 
 def main():
     """Main entry point for LangGraph implementation."""
+    # Load environment variables from .env file
+    load_dotenv()
+
     print("\n" + "=" * 80)
     print("LANGGRAPH IMPLEMENTATION - Travel Photo Organization")
     print("Stateful Multi-Agent Workflow Orchestration")

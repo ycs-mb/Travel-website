@@ -16,6 +16,7 @@ from datetime import datetime
 import time
 import base64
 
+from dotenv import load_dotenv
 from langsmith import Client, traceable, trace
 from langsmith.run_helpers import get_current_run_tree
 from langsmith.evaluation import evaluate, LangChainStringEvaluator
@@ -43,6 +44,9 @@ def setup_langsmith_client() -> Client:
     - LANGCHAIN_PROJECT: Project name (default: "travel-photo-workflow")
     - LANGCHAIN_TRACING_V2: Set to "true" to enable tracing
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
     api_key = os.getenv("LANGCHAIN_API_KEY")
     if not api_key:
         print("[LangSmith] WARNING: LANGCHAIN_API_KEY not set. Tracing disabled.")
@@ -134,6 +138,9 @@ def assess_aesthetics_with_tracing(
     - Latency
     - Cost estimation
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
     start_time = time.time()
 
     api_key = os.getenv('GOOGLE_API_KEY')
@@ -225,6 +232,9 @@ def generate_caption_with_tracing(
 
     Demonstrates chaining multiple LLM calls with nested tracing.
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
     api_key = os.getenv('GOOGLE_API_KEY')
     if not api_key:
         return {
@@ -619,6 +629,9 @@ class LangSmithOrchestrator:
 
 def main():
     """Main entry point for LangSmith integration."""
+    # Load environment variables from .env file
+    load_dotenv()
+
     print("\n" + "=" * 80)
     print("LANGSMITH INTEGRATION - Travel Photo Organization")
     print("Observability, Monitoring, and Evaluation")
