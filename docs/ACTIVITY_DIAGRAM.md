@@ -105,41 +105,11 @@
                      └────┬───────┘
                           ▼
         ┌─────────────────────────────────────────┐
-        │ STAGE 3: DUPLICATE DETECTION            │
-        │ Agent 4                                 │
-        │ • Generate perceptual hashes            │
-        │ • Compute CLIP embeddings               │
-        │ • Find similar groups                   │
-        │ • Select best from each group           │
-        │ Parallel: 1 worker (quadratic)          │
-        └────────────────┬────────────────────────┘
-                         │
-                         ▼
-        ┌─────────────────────────────────────────┐
-        │ Validate Agent 4 Output                 │
-        │ • Verify group structure                │
-        │ • Check selected_best exists            │
-        └────────────────┬────────────────────────┘
-                         │
-                ┌────────┴────────┐
-                │ Validation OK?  │
-                └────┬───────┬────┘
-                     │       │
-                  Yes│       │No
-                     │       ▼
-                     │   ┌─────────────────────┐
-                     │   │ Create single group  │
-                     │   │ with all images     │
-                     │   └────────┬────────────┘
-                     │            │
-                     └────┬───────┘
-                          ▼
-        ┌─────────────────────────────────────────┐
-        │ STAGE 4: PARALLEL ENRICHMENT            │
-        │ Agents 5 & 6 Run Concurrently           │
+        │ STAGE 3: PARALLEL ENRICHMENT            │
+        │ Agents 4 & 5 Run Concurrently           │
         │                                         │
         │ ┌───────────────────────────────────┐   │
-        │ │ Agent 5: Filtering & Categorization
+        │ │ Agent 4: Filtering & Categorization
         │ │ • Apply quality threshold          │   │
         │ │ • Categorize by content            │   │
         │ │ • Extract location from GPS        │   │
@@ -148,7 +118,7 @@
         │ └───────────────┬───────────────────┘   │
         │                 │                       │
         │ ┌───────────────▼───────────────────┐   │
-        │ │ Agent 6: Caption Generation       │   │
+        │ │ Agent 5: Caption Generation       │   │
         │ │ • Generate concise caption         │   │
         │ │ • Write standard caption           │   │
         │ │ • Compose detailed caption         │   │
@@ -162,7 +132,7 @@
                           │
                           ▼
         ┌─────────────────────────────────────────┐
-        │ Validate Agents 5 & 6 Outputs           │
+        │ Validate Agents 4 & 5 Outputs           │
         │ • Check category values                 │
         │ • Verify caption lengths                │
         │ • Validate keyword format               │
@@ -182,26 +152,7 @@
                      └────┬───────┘
                           ▼
         ┌─────────────────────────────────────────┐
-        │ STAGE 5: PRESENTATION GENERATION        │
-        │ Agent 7                                 │
-        │ • Generate React components             │
-        │ • Create Material UI layout             │
-        │ • Generate photos.json data             │
-        │ • Create README & FEATURES doc          │
-        │ Sequential: 1 worker                    │
-        └────────────────┬────────────────────────┘
-                         │
-                         ▼
-        ┌─────────────────────────────────────────┐
-        │ Validate Website Generation             │
-        │ • Check React syntax                    │
-        │ • Verify photos.json format             │
-        │ • Validate package.json                 │
-        └────────────────┬────────────────────────┘
-                         │
-                         ▼
-        ┌─────────────────────────────────────────┐
-        │ STAGE 6: REPORTING & ANALYSIS           │
+        │ STAGE 4: REPORTING & ANALYSIS           │
         │ • Aggregate all validations             │
         │ • Calculate statistics                  │
         │ • Generate final_report.json            │
@@ -234,50 +185,27 @@ Timeline: Parallel Execution of 150 Images
 
 Time (minutes)
 0        │
-         │  Agent 1: Metadata Extraction ────────┐
-         │  [4 workers, I/O bound]                │ ~2 min
-         │                                        │
-2        │                                        ▼
-         │                          ┌─────────────────────────┐
-         │                          │ Agent 4: Duplicates     │
-         │  Agent 2: Quality        │ [Pairwise Compare]      │
-         │  [2 workers, CPU]  ─┐    │                         │ ~3-4 min
-         │  ~3-4 min           │    │                         │
-         │                     ├──→ │                         │
-         │  Agent 3: Aesthetic │    │                         │
-         │  [2 workers, VLM]  ─┘    │                         │
-         │  ~5 min            ┘─────────────────────────────┘
-         │                                        │
-5        │                                        │
-         │                                        ▼
-         │                          ┌──────────────────────────┐
-         │                          │ Agent 5: Filtering       │
-         │  Agent 5 & 6            │ [2 workers, VLM]         │
-         │  Run Parallel           │ ~3 min      │            │
-         │                         │             │            │
-8        │                         │   Agent 6: Captions     │
-         │                         │   [2 workers, LLM]      │
-         │                         │   ~4 min                 │
-         │                         │             │            │
-         │                         │             ▼            │
-12       │                         └──────────────────────────┘
-         │                                        │
-         │                                        ▼
-         │                          ┌──────────────────────────┐
-         │                          │ Agent 7: Website Gen     │
-         │  Agent 7: Website        │ [Code generation]        │
-         │  [Sequential]            │ ~1 min                   │
-         │  ~1 min                  │                          │
-         │                          │                          │
-13       │                          ▼                          │
-         │                     ┌──────────────────────────┐    │
-         │                     │ Final Reporting & Save   │    │
-         │                     │ ~1 min                   │    │
-         │                     └──────────────────────────┘    │
-14       │
-         └─────────────────────────────────────────────────────
+         │  Agent 1: Metadata Extraction
+         │  [4 workers, I/O bound]  ~2 min
+         │
+2        │
+         │  Agent 2: Quality          ┐
+         │  [2 workers, CPU]  ─┐      │
+         │  ~3 min             ├──→ Agent 4 & 5: Parallel
+         │                     │      │ Filtering & Captions
+         │  Agent 3: Aesthetic │      │ ~4 min
+         │  [2 workers, VLM]  ─┘      │
+         │  ~5 min                    ┘
+         │
+6        │
+         │                     ┌──────────────────────────┐
+         │                     │ Final Reporting & Save   │
+         │                     │ ~1 min                   │
+         │                     └──────────────────────────┘
+         │
+7        └─────────────────────────────────────────────────────
 
-Total Estimated Time: ~14 minutes for 150 images
+Total Estimated Time: ~7-8 minutes for 150 images
 (with parallel optimization)
 ```
 
@@ -325,22 +253,13 @@ Image Input: photo.jpg
          Quality & Aesthetic Data    │
                   │                   │
                   │ (combined)        │
-                  ▼                   │
-         ┌─────────────────────────┐  │
-         │    Agent 4: Duplicates  │  │
-         │ • Compute hash          │  │
-         │ • Compare with others    │  │
-         │ • Group similar images   │  │
-         └──────────┬──────────────┘  │
-                    │                  │
-                    ▼                  │
-         Group ID & Similarity Data    │
-                    │                  │
-                    ├──────────────┬───┘
-                    │              │
-                    ▼              ▼
+                  └──────────┬────────┘
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
          ┌──────────────────┐ ┌──────────────────┐
-         │   Agent 5:       │ │   Agent 6:       │
+         │   Agent 4:       │ │   Agent 5:       │
          │   Filtering      │ │   Captions       │
          │                  │ │                  │
          │ Categorize       │ │ Generate:        │
@@ -352,19 +271,7 @@ Image Input: photo.jpg
                 │                     │
                 └──────────┬──────────┘
                            ▼
-            Full Image Record (all fields)
-                           │
-                           ▼
-         ┌────────────────────────────────┐
-         │    Agent 7 (Website)           │
-         │    Includes in:                 │
-         │    • photos.json                │
-         │    • UI components              │
-         │    • Search index                │
-         └────────────────────────────────┘
-                           │
-                           ▼
-           Output website with full metadata
+            Full Image Record (organized & labeled)
 ```
 
 ---

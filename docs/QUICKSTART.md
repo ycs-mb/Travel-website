@@ -77,14 +77,12 @@ python orchestrator.py
 **Expected output:**
 ```
 → Loading configuration...
-→ Initializing 7 agents...
-→ Stage 1/5: Metadata Extraction...
-→ Stage 2/5: Quality & Aesthetic Assessment...
-→ Stage 3/5: Duplicate Detection...
-→ Stage 4/5: Filtering & Caption Generation...
-→ Stage 5/5: Website Generation...
+→ Initializing 5 agents...
+→ Stage 1/3: Metadata Extraction...
+→ Stage 2/3: Quality & Aesthetic Assessment...
+→ Stage 3/3: Filtering & Caption Generation...
 → Generating reports...
-✓ Workflow complete in 14.5 minutes
+✓ Workflow complete in ~10 minutes
 ```
 
 ---
@@ -246,7 +244,7 @@ for a in aesthetic_list:
 EOF
 ```
 
-### Agent 5: Filtering & Categorization
+### Agent 4: Filtering & Categorization
 
 ```bash
 uv run python << 'EOF'
@@ -286,7 +284,7 @@ for c in categories:
 EOF
 ```
 
-### Agent 6: Caption Generation
+### Agent 5: Caption Generation
 
 ```bash
 uv run python << 'EOF'
@@ -349,10 +347,8 @@ Travel-website/
 │   ├── metadata_extraction.py
 │   ├── quality_assessment.py
 │   ├── aesthetic_assessment.py
-│   ├── duplicate_detection.py
 │   ├── filtering_categorization.py
-│   ├── caption_generation.py
-│   └── website_generation.py
+│   └── caption_generation.py
 │
 ├── utils/                      # Shared utilities
 │   ├── logger.py              # Logging
@@ -384,7 +380,6 @@ Travel-website/
 thresholds:
   min_technical_quality: 3      # Minimum quality score (1-5)
   min_aesthetic_quality: 3      # Minimum aesthetic score (1-5)
-  duplicate_hamming_distance: 10 # Similarity threshold
 
 # Parallelization
 agents:

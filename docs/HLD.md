@@ -3,10 +3,10 @@
 
 ### System Overview
 
-This is a **production-ready, 7-agent agentic workflow system** for intelligent travel photo organization. The system uses specialized AI agents working in a coordinated pipeline to automatically organize, assess, categorize, and showcase travel photographs.
+This is a **production-ready, 5-agent agentic workflow system** for intelligent travel photo organization. The system uses specialized AI agents working in a coordinated pipeline to automatically organize, assess, categorize, and enhance travel photographs.
 
 **Key Statistics:**
-- **7 AI Agents** - Each a domain specialist
+- **5 AI Agents** - Each a domain specialist
 - **Parallel Execution** - DAG-based workflow with 2 parallel stages
 - **Scalable** - Configurable workers and batch sizes
 - **Modular** - Each agent independent and testable
@@ -36,30 +36,20 @@ This is a **production-ready, 7-agent agentic workflow system** for intelligent 
       │ Analysis│    │ Assessment     │
       └──────┬──┘    └──────┬─────────┘
              └───────┬──────┘
+                     │
+      ┌──────────────▼──────────────┐
+      │   │ AGENT 4: Filtering      │  ◄── PARALLEL
+      │   │ & Categorization        │
+      │   │                         │
+      │   │ AGENT 5: Caption        │
+      │   │ Generation              │
+      └──────────────┬──────────────┘
+                     │
                      ▼
         ┌────────────────────────┐
-        │ AGENT 4:               │
-        │ Duplicate Detection    │
-        │ (Similarity Groups)    │
-        └────┬─────────────┬─────┘
-             │             │
-      ┌──────▼─┐    ┌──────▼──────────┐
-      │ AGENT 5 │    │ AGENT 6        │  ◄── PARALLEL
-      │Filtering│    │ Caption        │
-      │ & Class │    │ Generation     │
-      └──────┬──┘    └──────┬─────────┘
-             └───────┬──────┘
-                     ▼
-        ┌────────────────────────┐
-        │ AGENT 7:               │
-        │ Website Generation     │
-        │ (React/Material UI)    │
-        └────┬─────────────┬─────┘
-             │             │
-      ┌──────▼──┐   ┌──────▼────────┐
-      │ Reports │   │ Website       │
-      │ & Logs  │   │ App + Gallery │
-      └─────────┘   └───────────────┘
+        │ OUTPUTS:               │
+        │ Reports & Logs         │
+        └────────────────────────┘
 ```
 
 ### Processing Stages
@@ -68,9 +58,7 @@ This is a **production-ready, 7-agent agentic workflow system** for intelligent 
 |-------|--------|------|----------|
 | **1. Ingestion** | Agent 1 | Sequential | Fast (I/O) |
 | **2. Parallel Assessment** | Agents 2, 3 | Parallel | Medium (CPU/VLM) |
-| **3. Deduplication** | Agent 4 | Sequential | Medium (Pairwise) |
-| **4. Parallel Enrichment** | Agents 5, 6 | Parallel | Medium (VLM/LLM) |
-| **5. Presentation** | Agent 7 | Sequential | Fast (Code Gen) |
+| **3. Parallel Enrichment** | Agents 4, 5 | Parallel | Medium (VLM/LLM) |
 
 ---
 
@@ -83,36 +71,25 @@ Each agent receives upstream data and produces structured output:
 ```
 Agent 1: Metadata Extraction
   └─→ OUTPUT: image_id, filename, EXIF, GPS, camera_settings, flags
-      └─→ INPUT to Agents 2, 3, 5, 6
+      └─→ INPUT to Agents 2, 3, 4, 5
 
 Agent 2: Quality Assessment
   ├─ INPUT: Agent 1 output
   └─→ OUTPUT: quality_score (1-5), sharpness, exposure, noise, metrics
-      └─→ INPUT to Agent 4, 5, 6
+      └─→ INPUT to Agents 4, 5
 
 Agent 3: Aesthetic Assessment
   ├─ INPUT: Agent 1 output
   └─→ OUTPUT: overall_aesthetic (1-5), composition, framing, lighting
-      └─→ INPUT to Agent 4, 5, 6
+      └─→ INPUT to Agents 4, 5
 
-Agent 4: Duplicate Detection
-  ├─ INPUT: Agents 2, 3 output
-  └─→ OUTPUT: similarity_groups, selected_best_per_group
-      └─→ INPUT to Agents 5, 6
-
-Agent 5: Filtering & Categorization
-  ├─ INPUT: Agents 1, 2, 3, 4 output
+Agent 4: Filtering & Categorization
+  ├─ INPUT: Agents 1, 2, 3 output
   └─→ OUTPUT: category, subcategories, location, passes_filter, flags
-      └─→ INPUT to Agent 7
 
-Agent 6: Caption Generation
-  ├─ INPUT: Agents 1, 2, 3, 4, 5 output
+Agent 5: Caption Generation
+  ├─ INPUT: Agents 1, 2, 3, 4 output
   └─→ OUTPUT: captions (concise/standard/detailed), keywords
-      └─→ INPUT to Agent 7
-
-Agent 7: Website Generation
-  ├─ INPUT: All agents output + configuration
-  └─→ OUTPUT: React app, README, data files, documentation
 ```
 
 ### Data Structure Pattern
@@ -242,9 +219,8 @@ GOOGLE_API_KEY=AIza...         # For Gemini Vision (Agents 3, 5, 6)
 | **1. Metadata** | 4 | I/O bound (file reads) | Memory usage |
 | **2. Quality** | 2 | CPU bound (image processing) | OpenCV overhead |
 | **3. Aesthetic** | 2 | API rate limited | VLM API quotas |
-| **4. Duplicates** | 1 | Pairwise comparisons | Quadratic complexity |
-| **5. Filtering** | 2 | Balanced | VLM API quotas |
-| **6. Captions** | 2 | API rate limited | LLM API quotas |
+| **4. Filtering** | 2 | Balanced | VLM API quotas |
+| **5. Captions** | 2 | API rate limited | LLM API quotas |
 
 ### Parallel Execution Groups
 
@@ -257,16 +233,10 @@ Group 2 (Parallel):
           ├─→ Run concurrently (both depend on Agent 1)
   Agent 3 ┘
 
-Group 3 (Sequential dependency):
-  Agent 4 → Sequential execution (depends on Agents 2, 3)
-
-Group 4 (Parallel):
-  Agent 5 ┐
-          ├─→ Run concurrently (both depend on Agent 4)
-  Agent 6 ┘
-
-Group 5 (Sequential dependency):
-  Agent 7 → Sequential execution (depends on all)
+Group 3 (Parallel):
+  Agent 4 ┐
+          ├─→ Run concurrently (both depend on Agents 2, 3)
+  Agent 5 ┘
 ```
 
 ---
@@ -284,16 +254,7 @@ output/
 ├── logs/
 │   ├── workflow.log                  # Structured JSON logs
 │   └── errors.json                   # All errors with timestamps
-├── metadata/                          # Optional EXIF cache
-└── website/                           # Complete React application
-    ├── package.json
-    ├── README.md
-    ├── FEATURES.md
-    ├── src/
-    ├── public/
-    │   └── data/
-    │       └── photos.json            # Website data payload
-    └── node_modules/
+└── metadata/                          # Optional EXIF cache
 ```
 
 ### Report Schemas
@@ -324,8 +285,8 @@ output/
   "num_images_ingested": 150,
   "average_technical_score": 3.8,
   "average_aesthetic_score": 3.5,
-  "num_duplicates_found": 12,
   "num_images_final_selected": 138,
+  "num_images_flagged_for_manual_review": 10,
   "category_distribution": {...},
   "quality_distribution": {...},
   "agent_performance": [...],
@@ -344,16 +305,14 @@ output/
 | **1. Metadata** | O(N) | Linear in image count, I/O bound |
 | **2. Quality** | O(N) | Linear, CPU intensive |
 | **3. Aesthetic** | O(N) | Linear, VLM API calls |
-| **4. Duplicates** | O(N²) | Pairwise comparisons (mitigated by clustering) |
-| **5. Filtering** | O(N) | Linear classification |
-| **6. Captions** | O(N) | Linear, LLM API calls |
-| **7. Website** | O(N) | Linear code generation |
+| **4. Filtering** | O(N) | Linear classification |
+| **5. Captions** | O(N) | Linear, LLM API calls |
 
 ### Resource Constraints
 
 - **Memory**: ~100MB per parallel worker (image in memory)
-- **CPU**: Agents 2, 4 are CPU-intensive
-- **Network**: Agents 3, 5, 6 require API access
+- **CPU**: Agent 2 is CPU-intensive
+- **Network**: Agents 3, 4, 5 require API access
 - **Storage**: ~10x input size for outputs and cache
 
 ---
