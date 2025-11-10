@@ -391,10 +391,20 @@ Travel-website/
 uv add crewai crewai-tools
 ```
 
-### Issue: "Cannot import name 'BaseTool' from partially initialized module"
+### Issue: "Cannot import name 'BaseTool' from 'crewai_tools'"
 
 **Solution:**
-This was caused by a naming conflict between our custom tools directory and CrewAI's built-in `crewai_tools` module. We renamed our directory to `travel_photo_tools/` to avoid the conflict. If you see this error, ensure you're importing from `travel_photo_tools` not `crewai_tools`.
+The `BaseTool` class is in the `crewai` package, not `crewai_tools`. Use the correct import:
+```python
+from crewai.tools import BaseTool  # Correct
+```
+
+NOT:
+```python
+from crewai_tools import BaseTool  # Incorrect
+```
+
+**Note:** We also renamed our custom tools directory from `crewai_tools/` to `travel_photo_tools/` to avoid naming conflicts with the CrewAI framework's built-in `crewai_tools` module.
 
 ### Issue: "Agent has no LLM configured"
 
