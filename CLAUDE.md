@@ -2,6 +2,16 @@
 
 Guidance for Claude Code when working with this travel photo organization system.
 
+## 🆕 CrewAI Implementation
+
+This project now includes TWO implementations:
+1. **Original**: Custom agent orchestration (`orchestrator.py`)
+2. **CrewAI**: Framework-powered workflow (`crewai_orchestrator.py`)
+
+**See [CREWAI_CONVERSION.md](./CREWAI_CONVERSION.md) for detailed comparison and migration guide.**
+
+---
+
 ## 📚 Documentation Index
 
 This repository has comprehensive, well-organized documentation:
@@ -46,8 +56,11 @@ Agent 1: Metadata      → Agent 2: Quality   ─┐
 uv sync
 cp .env.example .env
 
-# Run workflow
+# Run original workflow
 uv run python orchestrator.py
+
+# Run CrewAI workflow (NEW!)
+uv run python crewai_orchestrator.py
 
 # View results
 cat output/reports/final_report.json | jq .

@@ -2,7 +2,17 @@
 
 > **AI-Powered Agentic System for Intelligent Travel Photo Management**
 
-A sophisticated, production-ready system that uses 7 specialized AI agents to automatically organize, assess, categorize, and showcase travel photographs with professional-grade metadata, quality scoring, and a beautiful Material UI web interface.
+A sophisticated, production-ready system that uses specialized AI agents to automatically organize, assess, categorize, and showcase travel photographs with professional-grade metadata, quality scoring, and a beautiful Material UI web interface.
+
+## 🆕 CrewAI Implementation Available!
+
+This project now includes a **CrewAI-based implementation** alongside the original custom agent system. CrewAI provides a modern, standardized framework for building collaborative AI agent systems.
+
+**Choose your implementation:**
+- **Original**: `orchestrator.py` - Custom agent orchestration
+- **CrewAI**: `crewai_orchestrator.py` - Framework-powered workflow
+
+📖 **See [CREWAI_CONVERSION.md](./CREWAI_CONVERSION.md) for detailed comparison and migration guide.**
 
 ## 🎯 Overview
 
@@ -30,11 +40,11 @@ This workflow orchestrates a team of world-class AI agents, each expert in a spe
 
 ## 📋 Prerequisites
 
-- **Python 3.9+**
+- **Python 3.10+** (updated for CrewAI compatibility)
 - **Node.js 18+** (for website)
 - **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager (recommended)
 - **npm** (for website)
-- Optional: API keys for Claude/GPT-4 (for production VLM/LLM features)
+- Optional: API keys for OpenAI/Gemini (for LLM-powered agents)
 
 ## 🚀 Quick Start
 
@@ -75,18 +85,27 @@ cp /path/to/your/photos/*.jpg sample_images/
 
 ### 3. Run the Workflow
 
-**Using uv:**
+**Option A: Original Custom System**
 
 ```bash
-# Execute the complete workflow
+# Execute the custom workflow
 uv run python orchestrator.py
+```
+
+**Option B: CrewAI System (NEW!)**
+
+```bash
+# Execute the CrewAI workflow
+uv run python crewai_orchestrator.py
 ```
 
 **Or activate virtual environment first:**
 
 ```bash
 source .venv/bin/activate
-python orchestrator.py
+python orchestrator.py          # Original
+# OR
+python crewai_orchestrator.py   # CrewAI
 ```
 
 ### 4. View Results
@@ -103,10 +122,15 @@ cd output/website && npm install && npm run dev
 
 ```
 Travel-website/
-├── WORKFLOW_DESIGN.md          # Complete architecture documentation
+├── README.md                   # This file
+├── CREWAI_CONVERSION.md        # CrewAI implementation guide
 ├── config.yaml                 # Workflow configuration
-├── orchestrator.py             # Main workflow orchestrator
-├── agents/                     # 7 AI agent implementations
+├── orchestrator.py             # Original workflow orchestrator
+├── crewai_orchestrator.py      # CrewAI workflow orchestrator (NEW!)
+├── agents/                     # Original AI agent implementations
+├── crewai_tools/               # CrewAI tools (wraps agents)
+├── crewai_config_agents.yaml   # CrewAI agent definitions
+├── crewai_config_tasks.yaml    # CrewAI task definitions
 ├── utils/                      # Logging, validation, helpers
 ├── sample_images/              # Input photos (add yours here)
 └── output/                     # Generated outputs

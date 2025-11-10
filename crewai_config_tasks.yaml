@@ -1,0 +1,135 @@
+# CrewAI Tasks Configuration for Travel Photo Organization
+
+extract_metadata:
+  description: |
+    Extract comprehensive metadata from all travel photos in the input directory.
+
+    For each image, extract:
+    - Filename, file size, and format
+    - Capture date/time (EXIF DateTime, DateTimeOriginal, DateTimeDigitized)
+    - GPS coordinates (latitude, longitude, altitude) and reverse geocode to location names
+    - Camera settings (ISO, aperture, shutter speed, focal length, camera model, lens model)
+    - Full EXIF data including white balance, flash, etc.
+    - Image dimensions and resolution
+
+    Flag images with:
+    - Missing critical metadata (no date/time)
+    - Corrupted or unreadable EXIF data
+    - Missing GPS data
+    - Non-standard formats
+
+    Use the Metadata Extraction Tool to process all images and return structured JSON results.
+  expected_output: |
+    JSON containing metadata for all images, including:
+    - Complete EXIF data for each image
+    - GPS coordinates and location names
+    - Camera settings
+    - Flags for images with issues
+    - Validation summary with success/warning status
+  agent: metadata_expert
+
+assess_quality:
+  description: |
+    Evaluate the technical quality of all travel photos using the metadata from the previous task.
+
+    For each image, assess:
+    - Sharpness and focus quality
+    - Noise levels and ISO performance
+    - Exposure correctness (brightness, contrast, dynamic range)
+    - Composition and framing
+    - Resolution adequacy
+
+    Provide:
+    - Overall quality score (1-5 scale)
+    - Individual scores for each quality dimension
+    - Detailed explanation of strengths and weaknesses
+    - Flags for images below quality thresholds
+
+    Use the Quality Assessment Tool with the metadata JSON from the previous task.
+  expected_output: |
+    JSON containing quality assessments for all images, including:
+    - Quality scores (1-5) for each image
+    - Breakdown of sharpness, noise, exposure, composition scores
+    - Technical analysis and recommendations
+    - Validation summary
+  agent: quality_analyst
+  context: [extract_metadata]
+
+assess_aesthetics:
+  description: |
+    Assess the aesthetic appeal and artistic merit of all travel photos using metadata from earlier tasks.
+
+    For each image, evaluate:
+    - Composition and visual balance
+    - Lighting quality and use
+    - Color harmony and saturation
+    - Subject interest and uniqueness
+    - Emotional impact and storytelling potential
+
+    Provide:
+    - Overall aesthetic score (1-5 scale)
+    - Individual scores for each aesthetic dimension
+    - Detailed artistic analysis
+    - Recommendations for use cases (hero images, gallery, social media)
+
+    Use the Aesthetic Assessment Tool with the metadata JSON from the metadata extraction task.
+  expected_output: |
+    JSON containing aesthetic assessments for all images, including:
+    - Aesthetic scores (1-5) for each image
+    - Breakdown of composition, lighting, color, subject scores
+    - Artistic analysis and recommendations
+    - Validation summary
+  agent: aesthetic_critic
+  context: [extract_metadata]
+
+filter_and_categorize:
+  description: |
+    Filter and categorize all travel photos based on the quality and aesthetic assessments.
+
+    For each image:
+    - Apply minimum quality threshold (from config)
+    - Apply minimum aesthetic threshold (from config)
+    - Determine if image passes selection criteria
+    - Categorize by content type (landmarks, nature, food, culture, people, urban, etc.)
+    - Categorize by time of day (golden hour, blue hour, daytime, night)
+    - Identify location/destination
+    - Flag images requiring manual review
+
+    Use the Filtering and Categorization Tool with metadata, quality, and aesthetic JSON from previous tasks.
+  expected_output: |
+    JSON containing filtering and categorization results, including:
+    - Boolean pass/fail for each image
+    - Category assignments (main category and subcategories)
+    - Time of day classification
+    - Location identification
+    - Flags for manual review
+    - Summary statistics
+  agent: content_curator
+  context: [extract_metadata, assess_quality, assess_aesthetics]
+
+generate_captions:
+  description: |
+    Generate engaging, multi-level captions for all travel photos that passed filtering or were flagged for review.
+
+    For each image, generate three caption levels:
+    1. CONCISE (<100 chars): Twitter-style, punchy description
+    2. STANDARD (150-250 chars): Instagram-style, engaging narrative with context
+    3. DETAILED (300-500 chars): Editorial-style, comprehensive story with technical and cultural details
+
+    Incorporate:
+    - Location from GPS/metadata
+    - Time of day and lighting conditions
+    - Camera settings in detailed captions
+    - Cultural or historical context when relevant
+    - Emotional resonance and storytelling elements
+    - Keywords for SEO and searchability (10-15 keywords per image)
+
+    Use the Caption Generation Tool with all previous JSON results.
+  expected_output: |
+    JSON containing captions for all images, including:
+    - Three levels of captions (concise, standard, detailed)
+    - Keywords list for each image
+    - Caption quality indicators
+    - Validation summary
+  agent: caption_writer
+  context: [extract_metadata, assess_quality, assess_aesthetics, filter_and_categorize]
