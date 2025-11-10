@@ -312,88 +312,7 @@ cultural context, human interest.
 
 ---
 
-## Agent 4: Duplicate Detection
-
-### Purpose
-Identify and group similar/duplicate images using perceptual hashing and embeddings.
-
-### Specifications
-
-| Aspect | Details |
-|--------|---------|
-| **Type** | Hybrid (Hash + Embeddings) |
-| **I/O** | CPU bound |
-| **Workers** | 1 (pairwise complexity) |
-| **Models** | ImageHash / CLIP embeddings |
-| **Timeout** | 120 seconds (scales with N²) |
-
-### System Prompt
-```
-You are an expert in visual similarity analysis using cutting-edge computer vision.
-
-Detect duplicates and visually similar images using:
-1. Perceptual hashing (pHash, dHash, aHash)
-2. Feature embedding similarity (CLIP, ResNet, VGG)
-3. SSIM (Structural Similarity Index)
-
-Thresholds:
-- Duplicate: Hamming distance ≤ 5 OR embedding cosine similarity ≥ 0.98
-- Near-duplicate: Hamming distance ≤ 10 OR embedding cosine similarity ≥ 0.95
-- Similar: Hamming distance ≤ 15 OR embedding cosine similarity ≥ 0.90
-
-For each similarity group:
-1. Select the best image using: technical_score * 0.4 + aesthetic_score * 0.6
-2. If scores are tied, prefer higher resolution
-3. Preserve originals in archive; mark others for removal/deduplication
-
-Handle edge cases: burst shots, bracketed exposures, panorama sequences.
-```
-
-### Input Schema
-
-```json
-{
-  "images": [
-    {
-      "image_id": "img_001",
-      "image_path": "path/to/image.jpg",
-      "technical_score": 4,
-      "aesthetic_score": 4,
-      "resolution": 12000000
-    }
-  ]
-}
-```
-
-### Output Schema
-
-```json
-[
-  {
-    "group_id": "group_001",
-    "image_ids": ["img_001", "img_002", "img_003"],
-    "selected_best": "img_001",
-    "similarity_metric": 0.98,
-    "similarity_type": "duplicate"
-  }
-]
-```
-
-### Validation Schema
-
-```json
-{
-  "agent": "Duplicate Detection",
-  "stage": "grouping",
-  "status": "success|warning|error",
-  "summary": "Found 12 duplicate groups from 150 images",
-  "issues": []
-}
-```
-
----
-
-## Agent 5: Filtering & Categorization
+## Agent 4: Filtering & Categorization
 
 ### Purpose
 Filter by quality thresholds and categorize images by content, location, time.
@@ -474,7 +393,7 @@ if (cannot_determine_category):
 
 ---
 
-## Agent 6: Caption Generation
+## Agent 5: Caption Generation
 
 ### Purpose
 Generate multi-level captions (concise/standard/detailed) with keywords.
@@ -522,96 +441,6 @@ Generate multi-level captions (concise/standard/detailed) with keywords.
     "detailed": "This photograph captures the quintessential Santorini experience..."
   },
   "keywords": ["sunset", "architecture", "mediterranean", "travel", "golden-hour"]
-}
-```
-
----
-
-## Agent 7: Website Generation
-
-### Purpose
-Generate a complete React/Material UI web application for viewing photos.
-
-### Specifications
-
-| Aspect | Details |
-|--------|---------|
-| **Type** | Code generation |
-| **I/O** | Disk I/O |
-| **Workers** | 1 (sequential) |
-| **Framework** | React 18 + Material UI v5 |
-| **Timeout** | 60 seconds |
-
-### Generated Structure
-
-```
-website/
-├── package.json
-├── tsconfig.json
-├── README.md
-├── FEATURES.md
-├── src/
-│   ├── index.tsx
-│   ├── App.tsx
-│   ├── components/
-│   │   ├── Gallery.tsx
-│   │   ├── Filters.tsx
-│   │   ├── Lightbox.tsx
-│   │   ├── Statistics.tsx
-│   │   └── Header.tsx
-│   ├── hooks/
-│   │   ├── usePhotos.ts
-│   │   └── useFilter.ts
-│   ├── context/
-│   │   └── PhotoContext.tsx
-│   └── styles/
-│       └── theme.ts
-├── public/
-│   ├── index.html
-│   └── data/
-│       └── photos.json
-└── .env.example
-```
-
-### Features Generated
-
-- ✅ Responsive masonry grid layout
-- ✅ Category/quality filters
-- ✅ Full-text search by caption/keywords
-- ✅ Lightbox with image metadata
-- ✅ Statistics dashboard with charts
-- ✅ Dark/light theme toggle
-- ✅ Mobile optimized
-- ✅ Export functionality
-- ✅ Sort by date/quality/aesthetic
-
-### Input Schema
-
-```json
-{
-  "images": [
-    {
-      "image_id": "img_001",
-      "filename": "photo.jpg",
-      "metadata": {...},
-      "technical_assessment": {...},
-      "aesthetic_assessment": {...},
-      "category": {...},
-      "captions": {...}
-    }
-  ],
-  "statistics": {...}
-}
-```
-
-### Output Schema
-
-```json
-{
-  "code_folder": "output/website",
-  "readme": "Complete setup and deployment guide",
-  "sample_data": "output/website/public/data/photos.json",
-  "feature_doc": "output/website/FEATURES.md"
 }
 ```
 
