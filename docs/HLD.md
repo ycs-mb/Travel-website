@@ -85,10 +85,11 @@ Agent 3: Aesthetic Assessment
 
 Agent 4: Filtering & Categorization
   ├─ INPUT: Agents 1, 2, 3 output
-  └─→ OUTPUT: category, subcategories, location, passes_filter, flags
+  └─→ OUTPUT: category, subcategories, time_category, location, passes_filter, flags
+      └─→ INPUT to Agent 5
 
 Agent 5: Caption Generation
-  ├─ INPUT: Agents 1, 2, 3, 4 output
+  ├─ INPUT: Agents 1, 2, 3, 4 output (full context from all upstream agents)
   └─→ OUTPUT: captions (concise/standard/detailed), keywords
 ```
 
@@ -233,10 +234,13 @@ Group 2 (Parallel):
           ├─→ Run concurrently (both depend on Agent 1)
   Agent 3 ┘
 
-Group 3 (Parallel):
-  Agent 4 ┐
-          ├─→ Run concurrently (both depend on Agents 2, 3)
-  Agent 5 ┘
+Group 3 (Sequential with potential parallelization):
+  Agent 4 → Filtering & Categorization (depends on Agents 1, 2, 3)
+  Agent 5 → Caption Generation (depends on Agents 1, 2, 3, 4)
+
+Note: Agents 4 and 5 currently run sequentially as Agent 5 uses Agent 4's
+categorization output for richer captions. Future optimization could run them
+in parallel if Agent 5 is modified to work without Agent 4's categorization.
 ```
 
 ---
