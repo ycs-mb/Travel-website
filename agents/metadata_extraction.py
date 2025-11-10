@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 import piexif
+from geopy.geocoders import Nominatim
 
 from utils.logger import log_error, log_info
 from utils.validation import validate_agent_output, create_validation_summary
@@ -61,13 +62,48 @@ class MetadataExtractionAgent:
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('metadata_extraction', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 4)
+        # Initialize geocoder for reverse geocoding
+        self.geolocator = Nominatim(user_agent="travel-photo-workflow")
+
+    def _dms_to_decimal(self, degrees: float, minutes: float, seconds: float) -> float:
+        """
+        Convert degrees, minutes, seconds to decimal degrees.
+
+        Args:
+            degrees: Degree value
+            minutes: Minute value
+            seconds: Second value
+
+        Returns:
+            Decimal degrees
+        """
+        return degrees + minutes / 60.0 + seconds / 3600.0
+
+    def _get_location_address(self, latitude: float, longitude: float) -> Optional[str]:
+        """
+        Get location address from coordinates using reverse geocoding.
+
+        Args:
+            latitude: Latitude coordinate
+            longitude: Longitude coordinate
+
+        Returns:
+            Location address or None
+        """
+        try:
+            location = self.geolocator.reverse((latitude, longitude), exactly_one=True, language='en', timeout=10)
+            return location.address if location else None
+        except Exception as e:
+            self.logger.warning(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
+            return None
 
     def extract_gps_info(self, exif_data: Dict) -> Dict[str, Optional[float]]:
-        """Extract GPS coordinates from EXIF data."""
+        """Extract GPS coordinates from EXIF data with reverse geocoding."""
         gps_info = {
             "latitude": None,
             "longitude": None,
-            "altitude": None
+            "altitude": None,
+            "location": None
         }
 
         if 'GPS' not in exif_data:
@@ -80,27 +116,65 @@ class MetadataExtractionAgent:
             if 'GPSLatitude' in gps and 'GPSLatitudeRef' in gps:
                 lat = gps['GPSLatitude']
                 lat_ref = gps['GPSLatitudeRef']
-                latitude = self._convert_to_degrees(lat)
-                if lat_ref == 'S':
-                    latitude = -latitude
-                gps_info['latitude'] = latitude
+
+                # Convert DMS to decimal using proper method
+                try:
+                    # Handle both tuple and regular number formats
+                    if isinstance(lat[0], (tuple, list)):
+                        lat_deg = lat[0][0] / lat[0][1] if lat[0][1] != 0 else lat[0][0]
+                        lat_min = lat[1][0] / lat[1][1] if lat[1][1] != 0 else lat[1][0]
+                        lat_sec = lat[2][0] / lat[2][1] if lat[2][1] != 0 else lat[2][0]
+                    else:
+                        lat_deg, lat_min, lat_sec = lat[0], lat[1], lat[2]
+
+                    latitude = self._dms_to_decimal(float(lat_deg), float(lat_min), float(lat_sec))
+                    if lat_ref == 'S':
+                        latitude = -latitude
+                    gps_info['latitude'] = round(latitude, 6)
+                except Exception as e:
+                    self.logger.warning(f"Error converting latitude: {e}")
 
             # Extract longitude
             if 'GPSLongitude' in gps and 'GPSLongitudeRef' in gps:
                 lon = gps['GPSLongitude']
                 lon_ref = gps['GPSLongitudeRef']
-                longitude = self._convert_to_degrees(lon)
-                if lon_ref == 'W':
-                    longitude = -longitude
-                gps_info['longitude'] = longitude
+
+                try:
+                    # Handle both tuple and regular number formats
+                    if isinstance(lon[0], (tuple, list)):
+                        lon_deg = lon[0][0] / lon[0][1] if lon[0][1] != 0 else lon[0][0]
+                        lon_min = lon[1][0] / lon[1][1] if lon[1][1] != 0 else lon[1][0]
+                        lon_sec = lon[2][0] / lon[2][1] if lon[2][1] != 0 else lon[2][0]
+                    else:
+                        lon_deg, lon_min, lon_sec = lon[0], lon[1], lon[2]
+
+                    longitude = self._dms_to_decimal(float(lon_deg), float(lon_min), float(lon_sec))
+                    if lon_ref == 'W':
+                        longitude = -longitude
+                    gps_info['longitude'] = round(longitude, 6)
+                except Exception as e:
+                    self.logger.warning(f"Error converting longitude: {e}")
 
             # Extract altitude
             if 'GPSAltitude' in gps:
-                alt = gps['GPSAltitude']
-                if isinstance(alt, tuple):
-                    gps_info['altitude'] = alt[0] / alt[1] if alt[1] != 0 else alt[0]
-                else:
-                    gps_info['altitude'] = float(alt)
+                try:
+                    alt = gps['GPSAltitude']
+                    if isinstance(alt, (tuple, list)):
+                        gps_info['altitude'] = round(alt[0] / alt[1] if alt[1] != 0 else alt[0], 2)
+                    else:
+                        gps_info['altitude'] = round(float(alt), 2)
+                except Exception as e:
+                    self.logger.warning(f"Error extracting altitude: {e}")
+
+            # Get location address from coordinates using reverse geocoding
+            if gps_info['latitude'] is not None and gps_info['longitude'] is not None:
+                try:
+                    location = self._get_location_address(gps_info['latitude'], gps_info['longitude'])
+                    if location:
+                        gps_info['location'] = location
+                        self.logger.info(f"Reverse geocoding found: {location}")
+                except Exception as e:
+                    self.logger.warning(f"Error performing reverse geocoding: {e}")
 
         except Exception as e:
             self.logger.warning(f"Error extracting GPS data: {e}")
@@ -330,7 +404,7 @@ class MetadataExtractionAgent:
                 "format": "unknown",
                 "dimensions": {"width": 0, "height": 0},
                 "capture_datetime": None,
-                "gps": {"latitude": None, "longitude": None, "altitude": None},
+                "gps": {"latitude": None, "longitude": None, "altitude": None, "location": None},
                 "camera_settings": {},
                 "exif_raw": {},
                 "flags": ["processing_error"]
