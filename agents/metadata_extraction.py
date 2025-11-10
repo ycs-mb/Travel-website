@@ -207,28 +207,61 @@ class MetadataExtractionAgent:
             # Basic file info
             file_size = image_path.stat().st_size
 
-            # Open image and get EXIF
+            # Open image and get basic info
             with Image.open(image_path) as img:
                 width, height = img.size
                 img_format = img.format
 
-                # Extract EXIF data
+                # Try to extract EXIF data using PIL first
                 exif_data = img.getexif()
 
+                # If PIL fails, try using piexif
+                if not exif_data:
+                    try:
+                        exif_dict = piexif.load(str(image_path))
+                        # Convert piexif format to standard format
+                        for ifd_name in ("0th", "Exif", "GPS", "1st"):
+                            ifd = exif_dict[ifd_name]
+                            for tag_id, value in ifd.items():
+                                tag_name = piexif.TAGS[ifd_name][tag_id]["name"]
+                                try:
+                                    if isinstance(value, bytes):
+                                        value = value.decode('utf-8', errors='ignore')
+                                    exif_raw[tag_name] = str(value)[:200]
+                                except Exception:
+                                    exif_raw[tag_name] = str(value)[:200]
+                    except Exception as e:
+                        self.logger.warning(f"piexif extraction failed for {image_path.name}: {e}")
+
+                # Process PIL EXIF data
                 if exif_data:
                     # Convert EXIF to readable format
                     for tag_id, value in exif_data.items():
                         tag = TAGS.get(tag_id, tag_id)
-                        exif_raw[tag] = str(value)[:100]  # Limit string length
 
-                        # Handle GPS data separately
-                        if tag == 'GPSInfo':
-                            gps_data = {}
-                            for gps_tag_id, gps_value in value.items():
-                                gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
-                                gps_data[gps_tag] = gps_value
-                            exif_raw['GPS'] = gps_data
-                else:
+                        try:
+                            # Handle different value types
+                            if isinstance(value, bytes):
+                                try:
+                                    value = value.decode('utf-8', errors='ignore')
+                                except Exception:
+                                    value = str(value)[:100]
+                            else:
+                                value = str(value)[:200]
+
+                            exif_raw[tag] = value
+
+                            # Handle GPS data separately
+                            if tag == 'GPSInfo':
+                                gps_data = {}
+                                for gps_tag_id, gps_value in value.items():
+                                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                                    gps_data[gps_tag] = gps_value
+                                exif_raw['GPS'] = gps_data
+                        except Exception as e:
+                            self.logger.warning(f"Error processing EXIF tag {tag}: {e}")
+
+                if not exif_data and not exif_raw:
                     flags.append("missing_exif")
                     log_error(
                         self.logger,
