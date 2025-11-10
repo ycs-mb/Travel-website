@@ -9,10 +9,9 @@ import time
 import yaml
 
 from crewai import Agent, Task, Crew, Process
-from crewai_tools import tool
 
 # Import custom tools
-from crewai_tools import (
+from travel_photo_tools import (
     MetadataExtractionTool,
     QualityAssessmentTool,
     AestheticAssessmentTool,

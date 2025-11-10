@@ -128,7 +128,7 @@ Travel-website/
 ├── orchestrator.py             # Original workflow orchestrator
 ├── crewai_orchestrator.py      # CrewAI workflow orchestrator (NEW!)
 ├── agents/                     # Original AI agent implementations
-├── crewai_tools/               # CrewAI tools (wraps agents)
+├── travel_photo_tools/         # CrewAI tools (wraps agents)
 ├── crewai_config_agents.yaml   # CrewAI agent definitions
 ├── crewai_config_tasks.yaml    # CrewAI task definitions
 ├── utils/                      # Logging, validation, helpers

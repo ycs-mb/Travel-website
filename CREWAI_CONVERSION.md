@@ -53,7 +53,7 @@ Orchestrator manually managed task dependencies
 
 ```
 crewai_orchestrator.py (CrewAI Framework)
-├── crewai_tools/ (Custom Tools - wraps existing agents)
+├── travel_photo_tools/ (Custom Tools - wraps existing agents)
 │   ├── metadata_tool.py (MetadataExtractionTool)
 │   ├── quality_tool.py (QualityAssessmentTool)
 │   ├── aesthetic_tool.py (AestheticAssessmentTool)
@@ -90,7 +90,7 @@ LLM-powered agents can reason about tool usage
 - Contains SYSTEM_PROMPT and processing logic
 
 **CrewAI:**
-- `crewai_tools/metadata_tool.py` - `MetadataExtractionTool` (wraps original agent)
+- `travel_photo_tools/metadata_tool.py` - `MetadataExtractionTool` (wraps original agent)
 - `crewai_config_agents.yaml` - `metadata_expert` (role, goal, backstory)
 - `crewai_config_tasks.yaml` - `extract_metadata` task
 
@@ -100,7 +100,7 @@ LLM-powered agents can reason about tool usage
 - `agents/quality_assessment.py` - `QualityAssessmentAgent` class
 
 **CrewAI:**
-- `crewai_tools/quality_tool.py` - `QualityAssessmentTool`
+- `travel_photo_tools/quality_tool.py` - `QualityAssessmentTool`
 - `crewai_config_agents.yaml` - `quality_analyst`
 - `crewai_config_tasks.yaml` - `assess_quality` task (depends on metadata)
 
@@ -110,7 +110,7 @@ LLM-powered agents can reason about tool usage
 - `agents/aesthetic_assessment.py` - `AestheticAssessmentAgent` class
 
 **CrewAI:**
-- `crewai_tools/aesthetic_tool.py` - `AestheticAssessmentTool`
+- `travel_photo_tools/aesthetic_tool.py` - `AestheticAssessmentTool`
 - `crewai_config_agents.yaml` - `aesthetic_critic`
 - `crewai_config_tasks.yaml` - `assess_aesthetics` task (depends on metadata)
 
@@ -120,7 +120,7 @@ LLM-powered agents can reason about tool usage
 - `agents/filtering_categorization.py` - `FilteringCategorizationAgent` class
 
 **CrewAI:**
-- `crewai_tools/filtering_tool.py` - `FilteringCategorizationTool`
+- `travel_photo_tools/filtering_tool.py` - `FilteringCategorizationTool`
 - `crewai_config_agents.yaml` - `content_curator`
 - `crewai_config_tasks.yaml` - `filter_and_categorize` task (depends on all previous)
 
@@ -130,7 +130,7 @@ LLM-powered agents can reason about tool usage
 - `agents/caption_generation.py` - `CaptionGenerationAgent` class
 
 **CrewAI:**
-- `crewai_tools/caption_tool.py` - `CaptionGenerationTool`
+- `travel_photo_tools/caption_tool.py` - `CaptionGenerationTool`
 - `crewai_config_agents.yaml` - `caption_writer`
 - `crewai_config_tasks.yaml` - `generate_captions` task (depends on all previous)
 
@@ -263,7 +263,7 @@ class CustomAgent:
 
 **CrewAI System:**
 ```python
-# 1. Create tool: crewai_tools/custom_tool.py
+# 1. Create tool: travel_photo_tools/custom_tool.py
 class CustomTool(BaseTool):
     name = "Custom Tool"
     description = "..."
@@ -342,7 +342,7 @@ Travel-website/
 │   ├── filtering_categorization.py
 │   └── caption_generation.py
 │
-├── crewai_tools/                    # CrewAI tools (wrap original agents)
+├── travel_photo_tools/              # CrewAI tools (wrap original agents)
 │   ├── __init__.py
 │   ├── metadata_tool.py
 │   ├── quality_tool.py
@@ -390,6 +390,11 @@ Travel-website/
 ```bash
 uv add crewai crewai-tools
 ```
+
+### Issue: "Cannot import name 'BaseTool' from partially initialized module"
+
+**Solution:**
+This was caused by a naming conflict between our custom tools directory and CrewAI's built-in `crewai_tools` module. We renamed our directory to `travel_photo_tools/` to avoid the conflict. If you see this error, ensure you're importing from `travel_photo_tools` not `crewai_tools`.
 
 ### Issue: "Agent has no LLM configured"
 
