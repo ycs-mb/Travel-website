@@ -39,6 +39,18 @@ class TravelPhotoOrchestrator:
         # Load configuration
         self.config = load_config(config_path)
 
+        # Create timestamped output directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_output = Path(self.config.get('paths', {}).get('output_dir', './output'))
+        self.timestamped_output = base_output / timestamp
+
+        # Update config with timestamped paths
+        self.config['paths']['output_dir'] = str(self.timestamped_output)
+        self.config['paths']['reports_output'] = str(self.timestamped_output / 'reports')
+        self.config['paths']['website_output'] = str(self.timestamped_output / 'website')
+        self.config['paths']['logs_output'] = str(self.timestamped_output / 'logs')
+        self.config['paths']['metadata_output'] = str(self.timestamped_output / 'metadata')
+
         # Setup logging
         log_file = Path(self.config.get('paths', {}).get('logs_output', './output/logs')) / 'workflow.log'
         self.logger = setup_logger(
@@ -68,6 +80,7 @@ class TravelPhotoOrchestrator:
 
         self.logger.info("=" * 80)
         self.logger.info("TRAVEL PHOTO ORGANIZATION WORKFLOW INITIALIZED")
+        self.logger.info(f"Output directory: {self.timestamped_output}")
         self.logger.info("=" * 80)
 
     def run_workflow(self) -> Dict[str, Any]:
@@ -395,8 +408,9 @@ def main():
         print(f"Total Processing Time: {final_report['processing_time_seconds']:.2f}s")
         print("=" * 80 + "\n")
 
-        print("✓ All outputs saved to ./output directory")
-        print("✓ Website generated at ./output/website")
+        print(f"✓ All outputs saved to {orchestrator.timestamped_output}")
+        print(f"✓ Website generated at {orchestrator.timestamped_output / 'website'}")
+        print(f"✓ Reports saved at {orchestrator.timestamped_output / 'reports'}")
         print("\nWorkflow completed successfully!")
 
     except Exception as e:
