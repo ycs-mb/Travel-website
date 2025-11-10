@@ -91,6 +91,9 @@ class FilteringCategorizationAgent:
                 genai.configure(api_key=api_key)
             else:
                 log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Filtering & Categorization")
+        else:
+            self.api_config = config.get('api', {}).get('openai', {})
+            self.model_name = self.api_config.get('model', 'gpt-4-vision-preview')
 
     def categorize_by_time(self, metadata: Dict[str, Any]) -> str:
         """Categorize image by time of day from metadata."""

@@ -61,7 +61,7 @@ class AestheticAssessmentAgent:
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('aesthetic_assessment', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 2)
-        self.model = self.agent_config.get('model', 'gpt4v')
+        self.model = self.agent_config.get('model', 'gemini')
         # Get API config based on model
         if 'gemini' in self.model.lower():
             self.api_config = config.get('api', {}).get('google', {})
@@ -74,6 +74,7 @@ class AestheticAssessmentAgent:
                 log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Aesthetic Assessment")
         else:
             self.api_config = config.get('api', {}).get('openai', {})
+            self.model_name = self.api_config.get('model', 'gpt-4-vision-preview')
 
     def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
         """
