@@ -315,18 +315,18 @@ cultural context, human interest.
 ## Agent 4: Filtering & Categorization
 
 ### Purpose
-Filter by quality thresholds and categorize images by content, location, time.
+Filter by quality thresholds and categorize images by content, location, time using Gemini Vision API.
 
 ### Specifications
 
 | Aspect | Details |
 |--------|---------|
-| **Type** | VLM + Rule-based |
+| **Type** | VLM (Vision Language Model) + Rule-based |
 | **I/O** | API bound |
-| **Workers** | 2 |
-| **Models** | Claude 3.5 Sonnet / GPT-4 Vision |
-| **Batch Size** | 10-20 images |
-| **Timeout** | 45 seconds per batch |
+| **Workers** | Sequential processing |
+| **Models** | Gemini 2.5 Flash Lite (default) |
+| **Batch Size** | Individual image processing |
+| **Timeout** | 45 seconds per image |
 
 ### Categorization Taxonomy
 
@@ -396,18 +396,39 @@ if (cannot_determine_category):
 ## Agent 5: Caption Generation
 
 ### Purpose
-Generate multi-level captions (concise/standard/detailed) with keywords.
+Generate multi-level captions (concise/standard/detailed) with keywords, leveraging context from all upstream agents.
 
 ### Specifications
 
 | Aspect | Details |
 |--------|---------|
-| **Type** | LLM + VLM |
+| **Type** | VLM (Vision Language Model) |
 | **I/O** | API bound |
 | **Workers** | 2 |
-| **Models** | Claude 3.5 Sonnet / GPT-4 Vision |
-| **Batch Size** | 5-10 images |
+| **Models** | Gemini 2.5 Flash Lite (default) |
+| **Batch Size** | Sequential processing |
 | **Timeout** | 45 seconds per image |
+
+### System Prompt
+```
+You are an award-winning travel writer and photo journalist. Generate engaging,
+informative captions that bring images to life.
+
+Caption levels:
+1. CONCISE (1 line, <100 chars): Twitter-style, punchy description
+2. STANDARD (2-3 lines, 150-250 chars): Instagram-style, engaging narrative
+3. DETAILED (paragraph, 300-500 chars): Editorial-style, comprehensive story
+
+Incorporate:
+- Location from GPS or metadata
+- Time of day and lighting conditions
+- Technical details (camera settings) in detailed captions
+- Cultural or historical context
+- Emotional resonance and storytelling
+- Keywords for searchability
+
+Avoid clichés; be specific and authentic.
+```
 
 ### Caption Levels
 
@@ -419,14 +440,38 @@ Generate multi-level captions (concise/standard/detailed) with keywords.
 
 ### Input Schema
 
+**Receives comprehensive context from all upstream agents:**
+
 ```json
 {
   "image_id": "img_001",
   "image_path": "path/to/image.jpg",
-  "metadata": {...},
-  "technical_assessment": {...},
-  "aesthetic_assessment": {...},
-  "category": "Landscape"
+  "metadata": {
+    "capture_datetime": "2024-06-15T14:30:45Z",
+    "gps": {"latitude": 40.7128, "longitude": -74.0060},
+    "camera_settings": {
+      "iso": 200,
+      "aperture": "f/2.8",
+      "camera_model": "Canon EOS R5"
+    }
+  },
+  "quality_assessment": {
+    "quality_score": 4,
+    "sharpness": 4,
+    "exposure": 5,
+    "noise": 3
+  },
+  "aesthetic_assessment": {
+    "overall_aesthetic": 4,
+    "composition": 5,
+    "lighting": 5
+  },
+  "categorization": {
+    "category": "Landscape",
+    "subcategories": ["Mountain", "Sunset"],
+    "time_category": "Golden Hour",
+    "location": "Yosemite, CA"
+  }
 }
 ```
 
@@ -443,6 +488,30 @@ Generate multi-level captions (concise/standard/detailed) with keywords.
   "keywords": ["sunset", "architecture", "mediterranean", "travel", "golden-hour"]
 }
 ```
+
+### Implementation Details
+
+The caption agent uses all upstream data to create rich, contextual captions:
+
+1. **From Metadata Agent (Agent 1):**
+   - Location (GPS coordinates)
+   - Camera settings for technical details
+   - Capture time for temporal context
+
+2. **From Quality Agent (Agent 2):**
+   - Technical quality score
+   - Specific metrics (sharpness, exposure, noise)
+
+3. **From Aesthetic Agent (Agent 3):**
+   - Aesthetic quality score
+   - Composition and lighting notes
+
+4. **From Filtering Agent (Agent 4):**
+   - Main category and subcategories
+   - Time of day classification
+   - Location information
+
+This comprehensive context enables the generation of accurate, engaging captions that incorporate both technical excellence and storytelling.
 
 ---
 
