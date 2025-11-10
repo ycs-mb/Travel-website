@@ -97,6 +97,58 @@ class MetadataExtractionAgent:
             self.logger.warning(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
             return None
 
+    def _extract_image_gps(self, image_path: Path) -> Optional[tuple]:
+        """
+        Extract GPS coordinates from image EXIF data using PIL.
+
+        This is an alternative extraction method that directly parses EXIF GPS data.
+
+        Args:
+            image_path: Path to image file
+
+        Returns:
+            Tuple of (lat_dms, lon_dms, lat_ref, lon_ref) or None
+        """
+        try:
+            img = Image.open(image_path)
+            exif = img._getexif()
+
+            if not exif:
+                return None
+
+            gps_info = {}
+            for tag_id, value in exif.items():
+                tag = TAGS.get(tag_id, tag_id)
+                if tag == 'GPSInfo':
+                    for gps_tag in value:
+                        sub_tag = GPSTAGS.get(gps_tag, gps_tag)
+                        gps_info[sub_tag] = value[gps_tag]
+
+            if not gps_info:
+                return None
+
+            # Check if we have the required GPS tags
+            if 'GPSLatitude' not in gps_info or 'GPSLongitude' not in gps_info:
+                return None
+
+            # Extract latitude and longitude in DMS format
+            lat_dms = (float(gps_info['GPSLatitude'][0]),
+                       float(gps_info['GPSLatitude'][1]),
+                       float(gps_info['GPSLatitude'][2]))
+
+            lon_dms = (float(gps_info['GPSLongitude'][0]),
+                       float(gps_info['GPSLongitude'][1]),
+                       float(gps_info['GPSLongitude'][2]))
+
+            lat_ref = gps_info.get('GPSLatitudeRef', 'N')
+            lon_ref = gps_info.get('GPSLongitudeRef', 'E')
+
+            return lat_dms, lon_dms, lat_ref, lon_ref
+
+        except Exception as e:
+            self.logger.warning(f"Error extracting GPS data with _extract_image_gps: {e}")
+            return None
+
     def extract_gps_info(self, exif_data: Dict) -> Dict[str, Optional[float]]:
         """Extract GPS coordinates from EXIF data with reverse geocoding."""
         gps_info = {
@@ -347,6 +399,32 @@ class MetadataExtractionAgent:
 
             # Extract structured metadata
             gps_info = self.extract_gps_info(exif_raw)
+
+            # If GPS extraction from exif_raw failed, try direct PIL extraction
+            if not any(gps_info.values()):
+                try:
+                    gps_extraction = self._extract_image_gps(image_path)
+                    if gps_extraction:
+                        lat_dms, lon_dms, lat_ref, lon_ref = gps_extraction
+                        # Convert DMS to decimal
+                        latitude = self._dms_to_decimal(lat_dms[0], lat_dms[1], lat_dms[2])
+                        longitude = self._dms_to_decimal(lon_dms[0], lon_dms[1], lon_dms[2])
+                        if lat_ref == 'S':
+                            latitude = -latitude
+                        if lon_ref == 'W':
+                            longitude = -longitude
+                        # Get location address
+                        location = self._get_location_address(latitude, longitude)
+                        gps_info = {
+                            'latitude': round(latitude, 6),
+                            'longitude': round(longitude, 6),
+                            'altitude': None,
+                            'location': location
+                        }
+                        self.logger.info(f"GPS data extracted using PIL method for {image_path.name}")
+                except Exception as e:
+                    self.logger.warning(f"PIL GPS extraction fallback failed for {image_path.name}: {e}")
+
             camera_settings = self.extract_camera_settings(exif_raw)
             capture_datetime = self.extract_datetime(exif_raw)
 
