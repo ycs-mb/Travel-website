@@ -65,7 +65,7 @@ class AestheticAssessmentAgent:
         # Get API config based on model
         if 'gemini' in self.model.lower():
             self.api_config = config.get('api', {}).get('google', {})
-            self.model_name = self.api_config.get('model', 'gemini-1.5-flash')
+            self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
             # Configure Gemini API
             api_key = os.getenv('GOOGLE_API_KEY')
             if api_key:
