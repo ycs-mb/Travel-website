@@ -10,10 +10,8 @@ from agents import (
     MetadataExtractionAgent,
     QualityAssessmentAgent,
     AestheticAssessmentAgent,
-    DuplicateDetectionAgent,
     FilteringCategorizationAgent,
-    CaptionGenerationAgent,
-    WebsiteGenerationAgent
+    CaptionGenerationAgent
 )
 
 from utils.logger import setup_logger, get_error_log, save_error_log
@@ -25,7 +23,7 @@ class TravelPhotoOrchestrator:
     """
     Main orchestrator for the travel photo organization workflow.
 
-    Coordinates execution of all 7 agents in the proper sequence,
+    Coordinates execution of 5 agents in the proper sequence,
     handles parallelization, error recovery, and final reporting.
     """
 
@@ -47,7 +45,6 @@ class TravelPhotoOrchestrator:
         # Update config with timestamped paths
         self.config['paths']['output_dir'] = str(self.timestamped_output)
         self.config['paths']['reports_output'] = str(self.timestamped_output / 'reports')
-        self.config['paths']['website_output'] = str(self.timestamped_output / 'website')
         self.config['paths']['logs_output'] = str(self.timestamped_output / 'logs')
         self.config['paths']['metadata_output'] = str(self.timestamped_output / 'metadata')
 
@@ -67,10 +64,8 @@ class TravelPhotoOrchestrator:
             'metadata': MetadataExtractionAgent(self.config, self.logger),
             'quality': QualityAssessmentAgent(self.config, self.logger),
             'aesthetic': AestheticAssessmentAgent(self.config, self.logger),
-            'duplicates': DuplicateDetectionAgent(self.config, self.logger),
             'filtering': FilteringCategorizationAgent(self.config, self.logger),
-            'captions': CaptionGenerationAgent(self.config, self.logger),
-            'website': WebsiteGenerationAgent(self.config, self.logger)
+            'captions': CaptionGenerationAgent(self.config, self.logger)
         }
 
         # Storage for agent outputs
@@ -145,18 +140,7 @@ class TravelPhotoOrchestrator:
                 )
             )
 
-        # Stage 4: Duplicate Detection (requires Quality + Aesthetic)
-        self._run_agent_stage(
-            "Duplicate Detection",
-            lambda: self.agents['duplicates'].run(
-                image_paths,
-                self.outputs.get('quality', []),
-                self.outputs.get('aesthetic', []),
-                self.outputs.get('metadata', [])
-            )
-        )
-
-        # Stage 5 & 6: Filtering and Captions (can run in parallel after duplicates)
+        # Stage 3 & 4: Filtering and Captions (can run in parallel)
         self._run_agent_stage(
             "Filtering & Categorization",
             lambda: self.agents['filtering'].run(
@@ -176,21 +160,6 @@ class TravelPhotoOrchestrator:
                 self.outputs.get('aesthetic', []),
                 self.outputs.get('filtering', [])
             )
-        )
-
-        # Stage 7: Website Generation (requires all previous outputs)
-        all_data = {
-            'metadata': self.outputs.get('metadata', []),
-            'quality': self.outputs.get('quality', []),
-            'aesthetic': self.outputs.get('aesthetic', []),
-            'duplicates': self.outputs.get('duplicates', []),
-            'categories': self.outputs.get('filtering', []),
-            'captions': self.outputs.get('captions', [])
-        }
-
-        self._run_agent_stage(
-            "Website Generation",
-            lambda: self.agents['website'].run(all_data)
         )
 
         # Generate final report
@@ -275,7 +244,6 @@ class TravelPhotoOrchestrator:
         metadata_list = self.outputs.get('metadata_extraction', [])
         quality_list = self.outputs.get('quality_assessment', [])
         aesthetic_list = self.outputs.get('aesthetic_assessment', [])
-        duplicates_list = self.outputs.get('duplicate_detection', [])
         filtering_list = self.outputs.get('filtering_categorization', [])
 
         # Calculate statistics
@@ -292,10 +260,6 @@ class TravelPhotoOrchestrator:
             sum(a.get('overall_aesthetic', 0) for a in aesthetic_list) / len(aesthetic_list)
             if aesthetic_list else 0.0
         )
-
-        num_duplicates = sum(
-            len(g['image_ids']) - 1 for g in duplicates_list
-        ) if duplicates_list else 0
 
         num_final_selected = sum(
             1 for f in filtering_list if f.get('passes_filter', False)
@@ -323,7 +287,6 @@ class TravelPhotoOrchestrator:
             'num_images_flagged_metadata': num_flagged_metadata,
             'average_technical_score': round(avg_technical, 2),
             'average_aesthetic_score': round(avg_aesthetic, 2),
-            'num_duplicates_found': num_duplicates,
             'num_images_final_selected': num_final_selected,
             'num_images_flagged_for_manual_review': num_flagged_review,
             'processing_time_seconds': round(workflow_time, 2),
@@ -348,7 +311,6 @@ class TravelPhotoOrchestrator:
             'num_images_flagged_metadata': 0,
             'average_technical_score': 0.0,
             'average_aesthetic_score': 0.0,
-            'num_duplicates_found': 0,
             'num_images_final_selected': 0,
             'num_images_flagged_for_manual_review': 0,
             'processing_time_seconds': 0.0,
@@ -402,14 +364,12 @@ def main():
         print(f"Images Processed: {final_report['num_images_ingested']}")
         print(f"Average Technical Score: {final_report['average_technical_score']}/5")
         print(f"Average Aesthetic Score: {final_report['average_aesthetic_score']}/5")
-        print(f"Duplicates Found: {final_report['num_duplicates_found']}")
         print(f"Final Selected: {final_report['num_images_final_selected']}")
         print(f"Flagged for Review: {final_report['num_images_flagged_for_manual_review']}")
         print(f"Total Processing Time: {final_report['processing_time_seconds']:.2f}s")
         print("=" * 80 + "\n")
 
         print(f"✓ All outputs saved to {orchestrator.timestamped_output}")
-        print(f"✓ Website generated at {orchestrator.timestamped_output / 'website'}")
         print(f"✓ Reports saved at {orchestrator.timestamped_output / 'reports'}")
         print("\nWorkflow completed successfully!")
 
