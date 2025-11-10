@@ -80,20 +80,16 @@ class FilteringCategorizationAgent:
         self.agent_config = config.get('agents', {}).get('filtering_categorization', {})
         self.min_technical = self.agent_config.get('min_technical_score', 3)
         self.min_aesthetic = self.agent_config.get('min_aesthetic_score', 3)
-        self.model = self.agent_config.get('model', 'gemini')
 
         # Configure Gemini API
-        if 'gemini' in self.model.lower():
-            self.api_config = config.get('api', {}).get('google', {})
-            self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if api_key:
-                genai.configure(api_key=api_key)
-            else:
-                log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Filtering & Categorization")
+        self.api_config = config.get('api', {}).get('google', {})
+        self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
+
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if api_key:
+            genai.configure(api_key=api_key)
         else:
-            self.api_config = config.get('api', {}).get('openai', {})
-            self.model_name = self.api_config.get('model', 'gpt-4-vision-preview')
+            log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Filtering & Categorization")
 
     def categorize_by_time(self, metadata: Dict[str, Any]) -> str:
         """Categorize image by time of day from metadata."""

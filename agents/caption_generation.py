@@ -74,20 +74,16 @@ class CaptionGenerationAgent:
         self.config = config
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('caption_generation', {})
-        self.model = self.agent_config.get('model', 'gemini')
 
         # Configure Gemini API
-        if 'gemini' in self.model.lower():
-            self.api_config = config.get('api', {}).get('google', {})
-            self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if api_key:
-                genai.configure(api_key=api_key)
-            else:
-                log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Caption Generation")
+        self.api_config = config.get('api', {}).get('google', {})
+        self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
+
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if api_key:
+            genai.configure(api_key=api_key)
         else:
-            self.api_config = config.get('api', {}).get('openai', {})
-            self.model_name = self.api_config.get('model', 'gpt-4')
+            log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Caption Generation")
 
     def _call_llm_api(
         self,
