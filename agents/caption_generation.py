@@ -79,7 +79,7 @@ class CaptionGenerationAgent:
         # Configure Gemini API
         if 'gemini' in self.model.lower():
             self.api_config = config.get('api', {}).get('google', {})
-            self.model_name = self.api_config.get('model', 'gemini-1.5-flash')
+            self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
             api_key = os.getenv('GOOGLE_API_KEY')
             if api_key:
                 genai.configure(api_key=api_key)
