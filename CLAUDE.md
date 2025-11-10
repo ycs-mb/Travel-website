@@ -21,21 +21,30 @@ This repository has comprehensive, well-organized documentation:
 
 ## System Overview
 
-**7-agent agentic workflow** for intelligent travel photo organization:
+**5-agent agentic workflow** for intelligent travel photo organization:
 
 ```
-Agent 1: Metadata      → Agent 2: Quality   ─┐
-  (EXIF, GPS)         & Agent 3: Aesthetic ─→ Agent 4: Duplicates
-                                            ├→ Agent 5: Filtering
-                                            └→ Agent 6: Captions
-                                                  ↓
-                                          Agent 7: Website
+Agent 1: Metadata Extraction
+  (EXIF, GPS, Camera Settings)
+           ↓
+    ┌──────┴──────┐
+    ↓             ↓
+Agent 2:      Agent 3:
+Quality       Aesthetic      ← PARALLEL
+Assessment    Assessment
+    └──────┬──────┘
+           ↓
+    ┌──────┴──────┐
+    ↓             ↓
+Agent 4:      Agent 5:
+Filtering &   Caption        ← PARALLEL
+Categorization Generation
 ```
 
 - **Input**: Travel photos (JPG, PNG, HEIC, RAW)
-- **Output**: Organized website gallery + analytics
-- **Parallelization**: 2 stages run concurrently
-- **Models**: EXIF parsing, Vision APIs, LLMs for captions
+- **Output**: Organized reports, categorized images, multi-level captions + analytics
+- **Parallelization**: 2 parallel stages (Agents 2-3, then Agents 4-5)
+- **Models**: EXIF parsing, OpenCV quality analysis, Gemini Vision APIs, LLMs for captions
 
 ---
 
@@ -225,14 +234,13 @@ if os.getenv('GOOGLE_API_KEY'):
 
 | Agent | Model Type | Throughput |
 |-------|-----------|-----------|
-| 1. Metadata | Library | ~100 img/min |
-| 2. Quality | ML Model | ~10 img/min |
-| 3. Aesthetic | VLM API | ~5 img/min |
-| 4. Duplicates | Hash + Embed | ~1 min/150 img |
-| 5. Filtering | VLM API | ~10 img/min |
-| 6. Captions | LLM API | ~10 img/min |
+| 1. Metadata Extraction | Library (Pillow) | ~100 img/min |
+| 2. Quality Assessment | OpenCV + Algorithms | ~10 img/min |
+| 3. Aesthetic Assessment | Gemini Vision API | ~5 img/min |
+| 4. Filtering & Categorization | Gemini Vision API | ~10 img/min |
+| 5. Caption Generation | Gemini Vision/Language API | ~10 img/min |
 
-**Total for 150 images: ~14 minutes** (with parallelization)
+**Total for 150 images: ~8-12 minutes** (with parallelization)
 
 ---
 

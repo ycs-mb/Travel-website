@@ -2,31 +2,28 @@
 
 > **AI-Powered Agentic System for Intelligent Travel Photo Management**
 
-A sophisticated, production-ready system that uses 7 specialized AI agents to automatically organize, assess, categorize, and showcase travel photographs with professional-grade metadata, quality scoring, and a beautiful Material UI web interface.
+A sophisticated, production-ready system that uses 5 specialized AI agents to automatically organize, assess, categorize, and caption travel photographs with professional-grade metadata, quality scoring, and intelligent categorization.
 
 ## 🎯 Overview
 
 This workflow orchestrates a team of world-class AI agents, each expert in a specific domain:
 
-1. **Metadata Expert** - Extracts comprehensive EXIF, GPS, and camera data
-2. **Image Quality Analyst** - Evaluates technical quality (sharpness, exposure, noise)
-3. **Visual Curator** - Assesses aesthetic merit and artistic composition
-4. **Visual Comparator** - Detects duplicates and similar images
-5. **Semantic Classifier** - Categorizes by content, location, and time
-6. **Caption Writer** - Generates multi-level captions (concise, standard, detailed)
-7. **Material UI Web Expert** - Builds responsive React showcase website
+1. **Metadata Extraction Agent** - Extracts comprehensive EXIF, GPS, and camera data
+2. **Quality Assessment Agent** - Evaluates technical quality (sharpness, exposure, noise)
+3. **Aesthetic Assessment Agent** - Assesses aesthetic merit and artistic composition
+4. **Filtering & Categorization Agent** - Categorizes by content, location, time and filters by quality thresholds
+5. **Caption Generation Agent** - Generates multi-level captions (concise, standard, detailed) with keywords
 
 ## ✨ Features
 
 - 📸 **Automated EXIF Extraction** - GPS, camera settings, timestamps
-- 🎨 **Dual Quality Assessment** - Technical metrics + aesthetic evaluation
-- 🔍 **Smart Duplicate Detection** - Perceptual hashing + visual similarity
-- 🏷️ **Intelligent Categorization** - Scene recognition, time-of-day, location
-- ✍️ **AI Caption Generation** - Three caption levels with keywords
-- 🌐 **Beautiful Web Gallery** - Material UI React app with filters and search
-- 📊 **Comprehensive Statistics** - Quality distributions, category breakdowns
-- ⚡ **Parallel Processing** - Optimized workflow with concurrent execution
-- 🔧 **Production-Ready** - Structured logging, error handling, validation
+- 🎨 **Dual Quality Assessment** - Technical metrics (OpenCV) + aesthetic evaluation (Gemini Vision)
+- 🏷️ **Intelligent Categorization** - Scene recognition, time-of-day, location filtering
+- ✍️ **AI Caption Generation** - Three caption levels with keywords (powered by Gemini)
+- 📊 **Comprehensive Statistics** - Quality distributions, category breakdowns, performance metrics
+- ⚡ **Parallel Processing** - Optimized workflow with 2 parallel stages
+- 🔧 **Production-Ready** - Structured logging, error handling, 3-tier validation
+- 🎯 **Smart Filtering** - Configurable quality/aesthetic thresholds with flagging system
 
 ## 📋 Prerequisites
 
