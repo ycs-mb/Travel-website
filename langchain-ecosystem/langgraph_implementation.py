@@ -7,11 +7,15 @@ StateGraph with nodes, edges, conditional routing, and parallel execution.
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict, Annotated
 from datetime import datetime
 import operator
 import base64
+
+# Add parent directory to path for importing from no-framework
+sys.path.insert(0, str(Path(__file__).parent.parent / 'no-framework'))
 
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
@@ -22,7 +26,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
-# Import original utilities
+# Import original utilities from no-framework
 from utils.logger import setup_logger, log_error, log_info
 from utils.helpers import load_config, save_json, get_image_files, ensure_directories
 from PIL import Image
