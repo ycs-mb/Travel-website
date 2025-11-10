@@ -28,12 +28,6 @@ agents:
     model: "gpt4v"  # Options: gpt4v, gemini, nima
     parallel_workers: 2
 
-  duplicate_detection:
-    enabled: true
-    hash_threshold: 10
-    embedding_threshold: 0.90
-    model: "clip"  # Options: clip, resnet, vgg
-
   filtering_categorization:
     enabled: true
     min_technical_score: 3
@@ -46,12 +40,6 @@ agents:
     batch_size: 5
     model: "gemini"  # Options: gpt4, gemini
     include_keywords: true
-
-  website_generation:
-    enabled: true
-    template: "material-ui"
-    theme: "light"
-    enable_dark_mode: true
 
 # API Configuration (use environment variables for keys)
 api:
@@ -67,8 +55,6 @@ api:
 
 # Quality Thresholds
 thresholds:
-  duplicate_hamming_distance: 10
-  similarity_cosine_threshold: 0.90
   min_technical_quality: 3
   min_aesthetic_quality: 3
   min_resolution_pixels: 2000000  # 2MP
@@ -96,6 +82,7 @@ parallelization:
   parallel_groups:
     - ["quality_assessment", "aesthetic_assessment"]
     - ["filtering_categorization", "caption_generation"]
+  # Optimized flow: Agents 1 → (2+3 parallel) → (4+5 parallel)
 
 # Performance
 performance:
