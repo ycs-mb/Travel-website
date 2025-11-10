@@ -3,10 +3,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Optional
 
 from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Import existing caption generation logic
 from agents.caption_generation import CaptionGenerationAgent
@@ -14,31 +14,10 @@ from agents.caption_generation import CaptionGenerationAgent
 
 class CaptionGenerationInput(BaseModel):
     """Input schema for Caption Generation Tool."""
-
-    image_paths: List[str] = Field(
-        ...,
-        description="List of image file paths to generate captions for"
-    )
-    metadata_json: str = Field(
-        ...,
-        description="JSON string containing metadata from metadata extraction"
-    )
-    quality_json: str = Field(
-        ...,
-        description="JSON string containing quality assessments"
-    )
-    aesthetic_json: str = Field(
-        ...,
-        description="JSON string containing aesthetic assessments"
-    )
-    filtering_json: str = Field(
-        ...,
-        description="JSON string containing filtering and categorization results"
-    )
-    config: Dict[str, Any] = Field(
-        ...,
-        description="Configuration dictionary for the tool"
-    )
+    metadata_json: str
+    quality_json: str
+    aesthetic_json: str
+    filtering_json: str
 
 
 class CaptionGenerationTool(BaseTool):
@@ -52,35 +31,38 @@ class CaptionGenerationTool(BaseTool):
     description: str = (
         "Generates engaging, informative captions for travel photos at three levels: "
         "concise (<100 chars), standard (150-250 chars), and detailed (300-500 chars). "
-        "Incorporates location, technical details, and cultural context."
+        "Incorporates location, technical details, and cultural context. "
+        "Inputs: metadata_json, quality_json, aesthetic_json, filtering_json (JSON strings from previous tasks)"
     )
     args_schema: Type[BaseModel] = CaptionGenerationInput
 
-    def _run(
-        self,
-        image_paths: List[str],
-        metadata_json: str,
-        quality_json: str,
-        aesthetic_json: str,
-        filtering_json: str,
-        config: Dict[str, Any]
-    ) -> str:
+    # Store image paths and config
+    _image_paths: List[str] = []
+    _config: Dict[str, Any] = {}
+
+    def __init__(self, image_paths: Optional[List[str]] = None, config: Optional[Dict[str, Any]] = None, **kwargs):
+        """Initialize with image paths and config."""
+        super().__init__(**kwargs)
+        if image_paths:
+            self._image_paths = image_paths
+        if config:
+            self._config = config
+
+    def _run(self, metadata_json: str, quality_json: str, aesthetic_json: str, filtering_json: str) -> str:
         """
         Execute caption generation on provided images.
 
         Args:
-            image_paths: List of image file paths
             metadata_json: JSON string with metadata results
             quality_json: JSON string with quality results
             aesthetic_json: JSON string with aesthetic results
             filtering_json: JSON string with filtering results
-            config: Configuration dictionary
 
         Returns:
             JSON string containing captions for all images
         """
         # Convert string paths to Path objects
-        paths = [Path(p) for p in image_paths]
+        paths = [Path(p) for p in self._image_paths]
 
         # Parse previous results from JSON
         metadata_result = json.loads(metadata_json)
@@ -104,7 +86,7 @@ class CaptionGenerationTool(BaseTool):
             logger.addHandler(handler)
 
         # Create agent instance and run
-        agent = CaptionGenerationAgent(config=config, logger=logger)
+        agent = CaptionGenerationAgent(config=self._config, logger=logger)
         captions_list, validation = agent.run(
             paths, metadata_list, quality_list, aesthetic_list, filtering_list
         )

@@ -73,13 +73,28 @@ class CrewAITravelPhotoOrchestrator:
         self.agents_config = self._load_yaml_config('crewai_config_agents.yaml')
         self.tasks_config = self._load_yaml_config('crewai_config_tasks.yaml')
 
-        # Initialize tools
+        # Initialize tools with image paths and config
         self.tools = {
-            'metadata': MetadataExtractionTool(),
-            'quality': QualityAssessmentTool(),
-            'aesthetic': AestheticAssessmentTool(),
-            'filtering': FilteringCategorizationTool(),
-            'captions': CaptionGenerationTool()
+            'metadata': MetadataExtractionTool(
+                image_paths=self.image_path_strings,
+                config=self.config
+            ),
+            'quality': QualityAssessmentTool(
+                image_paths=self.image_path_strings,
+                config=self.config
+            ),
+            'aesthetic': AestheticAssessmentTool(
+                image_paths=self.image_path_strings,
+                config=self.config
+            ),
+            'filtering': FilteringCategorizationTool(
+                image_paths=self.image_path_strings,
+                config=self.config
+            ),
+            'captions': CaptionGenerationTool(
+                image_paths=self.image_path_strings,
+                config=self.config
+            )
         }
 
         # Create agents and tasks
@@ -178,11 +193,10 @@ class CrewAITravelPhotoOrchestrator:
         tasks = {}
 
         # Metadata Extraction Task
+        # Add image count info to description
+        metadata_desc = self.tasks_config['extract_metadata']['description'] + f"\n\nProcess {len(self.image_paths)} images from the input directory."
         tasks['metadata'] = Task(
-            description=self.tasks_config['extract_metadata']['description'].format(
-                image_paths=self.image_path_strings,
-                config=self.config
-            ),
+            description=metadata_desc,
             expected_output=self.tasks_config['extract_metadata']['expected_output'],
             agent=self.agents['metadata']
         )

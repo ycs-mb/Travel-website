@@ -3,10 +3,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Optional
 
 from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Import existing filtering logic
 from agents.filtering_categorization import FilteringCategorizationAgent
@@ -14,27 +14,9 @@ from agents.filtering_categorization import FilteringCategorizationAgent
 
 class FilteringCategorizationInput(BaseModel):
     """Input schema for Filtering and Categorization Tool."""
-
-    image_paths: List[str] = Field(
-        ...,
-        description="List of image file paths to filter and categorize"
-    )
-    metadata_json: str = Field(
-        ...,
-        description="JSON string containing metadata from metadata extraction"
-    )
-    quality_json: str = Field(
-        ...,
-        description="JSON string containing quality assessments"
-    )
-    aesthetic_json: str = Field(
-        ...,
-        description="JSON string containing aesthetic assessments"
-    )
-    config: Dict[str, Any] = Field(
-        ...,
-        description="Configuration dictionary for the tool"
-    )
+    metadata_json: str
+    quality_json: str
+    aesthetic_json: str
 
 
 class FilteringCategorizationTool(BaseTool):
@@ -48,33 +30,37 @@ class FilteringCategorizationTool(BaseTool):
     description: str = (
         "Filters travel photos based on quality and aesthetic thresholds, "
         "and categorizes them by content type (landmarks, nature, food, etc.). "
-        "Determines which photos pass selection criteria for final gallery."
+        "Determines which photos pass selection criteria for final gallery. "
+        "Inputs: metadata_json, quality_json, aesthetic_json (JSON strings from previous tasks)"
     )
     args_schema: Type[BaseModel] = FilteringCategorizationInput
 
-    def _run(
-        self,
-        image_paths: List[str],
-        metadata_json: str,
-        quality_json: str,
-        aesthetic_json: str,
-        config: Dict[str, Any]
-    ) -> str:
+    # Store image paths and config
+    _image_paths: List[str] = []
+    _config: Dict[str, Any] = {}
+
+    def __init__(self, image_paths: Optional[List[str]] = None, config: Optional[Dict[str, Any]] = None, **kwargs):
+        """Initialize with image paths and config."""
+        super().__init__(**kwargs)
+        if image_paths:
+            self._image_paths = image_paths
+        if config:
+            self._config = config
+
+    def _run(self, metadata_json: str, quality_json: str, aesthetic_json: str) -> str:
         """
         Execute filtering and categorization on provided images.
 
         Args:
-            image_paths: List of image file paths
             metadata_json: JSON string with metadata results
             quality_json: JSON string with quality results
             aesthetic_json: JSON string with aesthetic results
-            config: Configuration dictionary
 
         Returns:
             JSON string containing filtering results and categorizations
         """
         # Convert string paths to Path objects
-        paths = [Path(p) for p in image_paths]
+        paths = [Path(p) for p in self._image_paths]
 
         # Parse previous results from JSON
         metadata_result = json.loads(metadata_json)
@@ -96,7 +82,7 @@ class FilteringCategorizationTool(BaseTool):
             logger.addHandler(handler)
 
         # Create agent instance and run
-        agent = FilteringCategorizationAgent(config=config, logger=logger)
+        agent = FilteringCategorizationAgent(config=self._config, logger=logger)
         filtering_list, validation = agent.run(
             paths, metadata_list, quality_list, aesthetic_list
         )

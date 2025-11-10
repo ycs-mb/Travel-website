@@ -3,10 +3,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Optional
 
 from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Import existing quality assessment logic
 from agents.quality_assessment import QualityAssessmentAgent
@@ -14,19 +14,7 @@ from agents.quality_assessment import QualityAssessmentAgent
 
 class QualityAssessmentInput(BaseModel):
     """Input schema for Quality Assessment Tool."""
-
-    image_paths: List[str] = Field(
-        ...,
-        description="List of image file paths to assess quality"
-    )
-    metadata_json: str = Field(
-        ...,
-        description="JSON string containing metadata from previous stage"
-    )
-    config: Dict[str, Any] = Field(
-        ...,
-        description="Configuration dictionary for the tool"
-    )
+    metadata_json: str  # JSON from previous task
 
 
 class QualityAssessmentTool(BaseTool):
@@ -40,29 +28,35 @@ class QualityAssessmentTool(BaseTool):
     description: str = (
         "Assesses technical quality of travel photos by evaluating "
         "sharpness, noise levels, exposure, composition, and resolution. "
-        "Provides quality scores (1-5) and detailed technical analysis."
+        "Provides quality scores (1-5) and detailed technical analysis. "
+        "Input: metadata_json (JSON string from metadata extraction)"
     )
     args_schema: Type[BaseModel] = QualityAssessmentInput
 
-    def _run(
-        self,
-        image_paths: List[str],
-        metadata_json: str,
-        config: Dict[str, Any]
-    ) -> str:
+    # Store image paths and config
+    _image_paths: List[str] = []
+    _config: Dict[str, Any] = {}
+
+    def __init__(self, image_paths: Optional[List[str]] = None, config: Optional[Dict[str, Any]] = None, **kwargs):
+        """Initialize with image paths and config."""
+        super().__init__(**kwargs)
+        if image_paths:
+            self._image_paths = image_paths
+        if config:
+            self._config = config
+
+    def _run(self, metadata_json: str) -> str:
         """
         Execute quality assessment on provided images.
 
         Args:
-            image_paths: List of image file paths
             metadata_json: JSON string with metadata results
-            config: Configuration dictionary
 
         Returns:
             JSON string containing quality assessments for all images
         """
         # Convert string paths to Path objects
-        paths = [Path(p) for p in image_paths]
+        paths = [Path(p) for p in self._image_paths]
 
         # Parse metadata from JSON
         metadata_result = json.loads(metadata_json)
@@ -79,7 +73,7 @@ class QualityAssessmentTool(BaseTool):
             logger.addHandler(handler)
 
         # Create agent instance and run
-        agent = QualityAssessmentAgent(config=config, logger=logger)
+        agent = QualityAssessmentAgent(config=self._config, logger=logger)
         quality_list, validation = agent.run(paths, metadata_list)
 
         # Return results as JSON
