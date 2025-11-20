@@ -13,6 +13,7 @@ from geopy.geocoders import Nominatim
 
 from utils.logger import log_error, log_info
 from utils.validation import validate_agent_output, create_validation_summary
+from utils.heic_reader import is_heic_file, open_heic_with_pil, get_heic_exif
 
 
 class MetadataExtractionAgent:
@@ -300,10 +301,22 @@ class MetadataExtractionAgent:
 
         return settings
 
-    def extract_datetime(self, exif_data: Dict) -> Optional[str]:
-        """Extract capture datetime from EXIF data."""
+    def extract_datetime(self, exif_data: Dict, filename: str = None) -> Optional[str]:
+        """
+        Extract capture datetime from EXIF data, with filename fallback.
+
+        Args:
+            exif_data: EXIF data dictionary
+            filename: Image filename (used as fallback)
+
+        Returns:
+            ISO 8601 datetime string or None
+        """
+        import re
+
         datetime_fields = ['DateTimeOriginal', 'DateTimeDigitized', 'DateTime']
 
+        # Try EXIF data first
         for field in datetime_fields:
             if field in exif_data:
                 try:
@@ -313,6 +326,32 @@ class MetadataExtractionAgent:
                     return dt.isoformat() + 'Z'
                 except Exception as e:
                     self.logger.warning(f"Error parsing datetime from {field}: {e}")
+
+        # Fallback: Try to extract from filename
+        if filename:
+            try:
+                # Pattern 1: YYYYMMDD_HHMMSS (e.g., "20240929_111400000_iOS.jpg")
+                match = re.search(r'(\d{8})_(\d{6})', filename)
+                if match:
+                    date_part = match.group(1)  # YYYYMMDD
+                    time_part = match.group(2)  # HHMMSS
+                    dt_str = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}T{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}"
+                    # Validate it's a valid datetime
+                    dt = datetime.fromisoformat(dt_str)
+                    return dt.isoformat() + 'Z'
+
+                # Pattern 2: PXL_YYYYMMDD_HHMMSS (e.g., "PXL_20241004_080858452.MP.jpg")
+                match = re.search(r'PXL_(\d{8})_(\d{6})', filename)
+                if match:
+                    date_part = match.group(1)  # YYYYMMDD
+                    time_part = match.group(2)  # HHMMSS
+                    dt_str = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}T{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}"
+                    # Validate it's a valid datetime
+                    dt = datetime.fromisoformat(dt_str)
+                    return dt.isoformat() + 'Z'
+
+            except Exception as e:
+                self.logger.warning(f"Error extracting datetime from filename {filename}: {e}")
 
         return None
 
@@ -333,8 +372,25 @@ class MetadataExtractionAgent:
             # Basic file info
             file_size = image_path.stat().st_size
 
-            # Open image and get basic info
-            with Image.open(image_path) as img:
+            # Open image - handle HEIC directly without conversion
+            if is_heic_file(image_path):
+                try:
+                    img = open_heic_with_pil(image_path)
+                    flags.append("heic_format")
+                    self.logger.info(f"Opened HEIC file directly: {image_path.name}")
+                except Exception as e:
+                    log_error(
+                        self.logger,
+                        "MetadataExtraction",
+                        "HEICReadError",
+                        f"Failed to open HEIC file {image_path.name}: {e}",
+                        "warning"
+                    )
+                    return self.default_result()
+            else:
+                img = Image.open(image_path)
+
+            with img as img:
                 width, height = img.size
                 img_format = img.format
 
@@ -426,7 +482,7 @@ class MetadataExtractionAgent:
                     self.logger.warning(f"PIL GPS extraction fallback failed for {image_path.name}: {e}")
 
             camera_settings = self.extract_camera_settings(exif_raw)
-            capture_datetime = self.extract_datetime(exif_raw)
+            capture_datetime = self.extract_datetime(exif_raw, image_path.name)
 
             # Flag missing data
             if not capture_datetime:

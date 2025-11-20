@@ -14,6 +14,7 @@ This repository has comprehensive, well-organized documentation:
 | **[UML_DIAGRAMS.md](./docs/UML_DIAGRAMS.md)** | Class, sequence, components | Visual architecture |
 | **[ACTIVITY_DIAGRAM.md](./docs/ACTIVITY_DIAGRAM.md)** | Workflow flows, state machines | Understanding execution flow |
 | **[README.md](./README.md)** | Project overview and features | Feature overview |
+| **[HEIC_NATIVE_SUPPORT.md](./HEIC_NATIVE_SUPPORT.md)** | Native HEIC reading implementation | Direct HEIC support details |
 
 **START HERE**: [QUICKSTART.md](./docs/QUICKSTART.md) for 5-minute setup!
 
