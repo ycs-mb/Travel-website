@@ -10,6 +10,7 @@ import cv2
 
 from utils.logger import log_error, log_info
 from utils.validation import validate_agent_output, create_validation_summary
+from utils.heic_reader import is_heic_file, read_heic_as_numpy
 
 
 class QualityAssessmentAgent:
@@ -242,10 +243,34 @@ class QualityAssessmentAgent:
         issues = []
 
         try:
-            # Load image
-            image = cv2.imread(str(image_path))
-            if image is None:
-                raise ValueError("Failed to load image")
+            # Load image - handle HEIC directly without conversion
+            if is_heic_file(image_path):
+                try:
+                    image = read_heic_as_numpy(image_path)
+                    self.logger.info(f"Loaded HEIC file directly for quality assessment: {image_path.name}")
+                except Exception as e:
+                    log_error(
+                        self.logger,
+                        "Quality Assessment",
+                        "HEICReadError",
+                        f"Failed to read HEIC file {image_path.name}: {e}",
+                        "warning"
+                    )
+                    return {
+                        "image_id": metadata.get('image_id', image_path.stem),
+                        "quality_score": 3,
+                        "sharpness": 3,
+                        "exposure": 3,
+                        "noise": 3,
+                        "resolution": 3,
+                        "issues": ["heic_read_error"],
+                        "metrics": {}
+                    }
+            else:
+                # Load image with OpenCV
+                image = cv2.imread(str(image_path))
+                if image is None:
+                    raise ValueError("Failed to load image")
 
             # Convert BGR to RGB
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

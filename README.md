@@ -24,6 +24,7 @@ This workflow orchestrates a team of world-class AI agents, each expert in a spe
 - ⚡ **Parallel Processing** - Optimized workflow with 2 parallel stages
 - 🔧 **Production-Ready** - Structured logging, error handling, 3-tier validation
 - 🎯 **Smart Filtering** - Configurable quality/aesthetic thresholds with flagging system
+- 📱 **Native HEIC Support** - Direct reading of HEIC/HEIF files from iPhone (no conversion needed)
 
 ## 📋 Prerequisites
 
@@ -66,9 +67,18 @@ cp .env.example .env
 # Create sample images directory
 mkdir -p sample_images
 
-# Copy your travel photos
-cp /path/to/your/photos/*.jpg sample_images/
+# Copy your travel photos (supports JPG, PNG, HEIC, RAW and more)
+cp /path/to/your/photos/*.{jpg,png,heic,raw} sample_images/
 ```
+
+**Supported Image Formats:**
+- **JPG/JPEG** - Standard format
+- **PNG** - Lossless format
+- **HEIC/HEIF** - iPhone photos (auto-converted to JPEG for processing)
+- **RAW** - Generic RAW format
+- **CR2** - Canon RAW
+- **NEF** - Nikon RAW
+- **ARW** - Sony Alpha RAW
 
 ### 3. Run the Workflow
 

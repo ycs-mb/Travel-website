@@ -12,6 +12,7 @@ import google.generativeai as genai
 
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
+from utils.heic_reader import is_heic_file, open_heic_with_pil
 
 
 class FilteringCategorizationAgent:
@@ -140,20 +141,56 @@ class FilteringCategorizationAgent:
             Tuple of (main_category, subcategories)
         """
         try:
-            # Read and encode image
-            with open(image_path, 'rb') as f:
-                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+            # Handle HEIC files - read directly without conversion
+            if is_heic_file(image_path):
+                try:
+                    # Read HEIC directly with PIL
+                    from PIL import Image as PILImage
+                    import io
+                    img = open_heic_with_pil(image_path)
 
-            # Determine media type
-            suffix = image_path.suffix.lower()
-            media_type_map = {
-                '.jpg': 'image/jpeg',
-                '.jpeg': 'image/jpeg',
-                '.png': 'image/png',
-                '.gif': 'image/gif',
-                '.webp': 'image/webp'
-            }
-            media_type = media_type_map.get(suffix, 'image/jpeg')
+                    # Convert to RGB if needed
+                    if img.mode != 'RGB':
+                        if img.mode in ('RGBA', 'LA', 'P'):
+                            background = PILImage.new('RGB', img.size, (255, 255, 255))
+                            if img.mode == 'P':
+                                img = img.convert('RGBA')
+                            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                            img = background
+                        else:
+                            img = img.convert('RGB')
+
+                    # Encode as JPEG in memory
+                    img_buffer = io.BytesIO()
+                    img.save(img_buffer, format='JPEG', quality=95)
+                    image_data = base64.standard_b64encode(img_buffer.getvalue()).decode('utf-8')
+                    media_type = 'image/jpeg'
+
+                    log_info(self.logger, f"Opened HEIC directly for API: {image_path.name}", "Filtering & Categorization")
+                except Exception as e:
+                    log_error(
+                        self.logger,
+                        "Filtering & Categorization",
+                        "HEICReadError",
+                        f"Failed to read HEIC file {image_path.name}: {e}",
+                        "warning"
+                    )
+                    return ("Unknown", [])
+            else:
+                # Read and encode image
+                with open(image_path, 'rb') as f:
+                    image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+
+                # Determine media type
+                suffix = image_path.suffix.lower()
+                media_type_map = {
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.png': 'image/png',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp'
+                }
+                media_type = media_type_map.get(suffix, 'image/jpeg')
 
             # Create prompt for categorization
             categories_list = ', '.join(self.CATEGORIES.keys())
