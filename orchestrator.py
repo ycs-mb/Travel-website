@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from datetime import datetime
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents import (
     MetadataExtractionAgent,
@@ -27,15 +28,27 @@ class TravelPhotoOrchestrator:
     handles parallelization, error recovery, and final reporting.
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", config_overrides: Dict[str, Any] = None):
         """
         Initialize orchestrator.
 
         Args:
             config_path: Path to configuration file
+            config_overrides: Optional dictionary to override config values
         """
         # Load configuration
         self.config = load_config(config_path)
+        
+        # Apply overrides
+        if config_overrides:
+            def update(d, u):
+                for k, v in u.items():
+                    if isinstance(v, dict):
+                        d[k] = update(d.get(k, {}), v)
+                    else:
+                        d[k] = v
+                return d
+            update(self.config, config_overrides)
 
         # Create timestamped output directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,32 +112,49 @@ class TravelPhotoOrchestrator:
 
         self.logger.info(f"Found {len(image_paths)} images to process")
 
-        # Stage 1: Metadata Extraction
-        self._run_agent_stage(
-            "Metadata Extraction",
-            lambda: self.agents['metadata'].run(image_paths)
-        )
-
-        # Stage 2 & 3: Quality and Aesthetic Assessment (can run in parallel)
+        # Stage 1, 2 & 3: Run all three in parallel with proper dependencies
+        # Metadata must complete before Quality and Aesthetic can start
         if self.config.get('parallelization', {}).get('enable_parallel_agents', True):
-            self.logger.info("Running Quality and Aesthetic assessment in parallel")
-            # In a full implementation, use ThreadPoolExecutor here
-            # For now, run sequentially
-            self._run_agent_stage(
-                "Quality Assessment",
-                lambda: self.agents['quality'].run(
-                    image_paths,
-                    self.outputs.get('metadata', [])
+            self.logger.info("Running Metadata, Quality, and Aesthetic assessment with parallel optimization")
+            
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                # First, run metadata extraction
+                metadata_future = executor.submit(
+                    self._run_agent_stage,
+                    "Metadata Extraction",
+                    lambda: self.agents['metadata'].run(image_paths)
                 )
-            )
-            self._run_agent_stage(
-                "Aesthetic Assessment",
-                lambda: self.agents['aesthetic'].run(
-                    image_paths,
-                    self.outputs.get('metadata', [])
+                
+                # Wait for metadata to complete
+                metadata_future.result()
+                
+                # Now run quality and aesthetic in parallel
+                quality_future = executor.submit(
+                    self._run_agent_stage,
+                    "Quality Assessment",
+                    lambda: self.agents['quality'].run(
+                        image_paths,
+                        self.outputs.get('metadata', [])
+                    )
                 )
-            )
+                aesthetic_future = executor.submit(
+                    self._run_agent_stage,
+                    "Aesthetic Assessment",
+                    lambda: self.agents['aesthetic'].run(
+                        image_paths,
+                        self.outputs.get('metadata', [])
+                    )
+                )
+                
+                # Wait for both to complete
+                for future in as_completed([quality_future, aesthetic_future]):
+                    future.result()  # This will raise any exceptions that occurred
         else:
+            # Sequential execution
+            self._run_agent_stage(
+                "Metadata Extraction",
+                lambda: self.agents['metadata'].run(image_paths)
+            )
             self._run_agent_stage(
                 "Quality Assessment",
                 lambda: self.agents['quality'].run(
@@ -140,7 +170,8 @@ class TravelPhotoOrchestrator:
                 )
             )
 
-        # Stage 3 & 4: Filtering and Captions (can run in parallel)
+        # Stage 4 & 5: Filtering and Captions (Filtering must complete before Captions)
+        # Note: Caption generation depends on filtering output, so they can't run in parallel
         self._run_agent_stage(
             "Filtering & Categorization",
             lambda: self.agents['filtering'].run(

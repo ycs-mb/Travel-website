@@ -8,7 +8,8 @@ import base64
 import json
 import re
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
@@ -78,13 +79,22 @@ class CaptionGenerationAgent:
 
         # Configure Gemini API
         self.api_config = config.get('api', {}).get('google', {})
-        self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
+        self.model_name = self.api_config.get('model')
+        if not self.model_name:
+            log_warning(self.logger, "Google API model not specified in config, defaulting to 'gemini-1.5-flash'", "Caption Generation")
+            self.model_name = "gemini-1.5-flash"
 
-        api_key = os.getenv('GOOGLE_API_KEY')
-        if api_key:
-            genai.configure(api_key=api_key)
-        else:
-            log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Caption Generation")
+        # Initialize Vertex AI client
+        try:
+            self.client = genai.Client(
+                vertexai=True,
+                project=self.api_config.get('project'),
+                location=self.api_config.get('location', 'us-central1')
+            )
+            log_info(self.logger, f"Initialized Vertex AI client for project {self.api_config.get('project')}", "Caption Generation")
+        except Exception as e:
+            log_warning(self.logger, f"Failed to initialize Vertex AI client: {e}", "Caption Generation")
+            self.client = None
 
     def _call_llm_api(
         self,
@@ -194,22 +204,37 @@ RESPONSE FORMAT: Generate three levels of captions as a JSON object:
 
 Make captions specific, avoid clichés, and incorporate the actual visual elements."""
 
-            # Call Gemini API with image
-            model = genai.GenerativeModel(self.model_name)
-            response = model.generate_content([
-                prompt,
-                {
-                    "mime_type": media_type,
-                    "data": image_data,
-                }
-            ])
+            # Call Gemini API with image via Vertex AI
+            if not self.client:
+                raise Exception("Vertex AI client not initialized")
+            
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    types.Part.from_bytes(
+                        data=base64.standard_b64decode(image_data),
+                        mime_type=media_type
+                    )
+                ]
+            )
 
             # Parse response
             response_text = response.text
             log_info(self.logger, f"Received Gemini captions for {image_path.name}", "Caption Generation")
 
             # Extract captions
-            return self._parse_caption_response(response_text)
+            captions = self._parse_caption_response(response_text)
+            
+            # Add token usage metadata
+            if hasattr(response, 'usage_metadata'):
+                captions['token_usage'] = {
+                    'prompt_token_count': response.usage_metadata.prompt_token_count,
+                    'candidates_token_count': response.usage_metadata.candidates_token_count,
+                    'total_token_count': response.usage_metadata.total_token_count
+                }
+            
+            return captions
 
         except Exception as e:
             log_error(
@@ -359,6 +384,9 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
                 'captions': caption_data['captions'],
                 'keywords': caption_data['keywords']
             }
+            
+            if 'token_usage' in caption_data:
+                result['token_usage'] = caption_data['token_usage']
 
             # Validate
             is_valid, error_msg = validate_agent_output("caption_generation", result)

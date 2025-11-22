@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start;">
+    <!-- Status & Upload Card -->
+    <div class="card">
+        <h2 style="margin-top: 0; margin-bottom: 1.5rem;">Start New Workflow</h2>
+
+        {% if current_run.status != 'running' %}
+        <form action="/run" method="post" enctype="multipart/form-data">
+            <div style="border: 2px dashed var(--border); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; margin-bottom: 1.5rem; transition: all 0.2s; cursor: pointer; background-color: var(--bg);"
+                onclick="document.getElementById('file-input').click()"
+                ondragover="this.style.borderColor=var(--accent); this.style.backgroundColor=var(--surface-hover); event.preventDefault();"
+                ondragleave="this.style.borderColor=var(--border); this.style.backgroundColor=var(--bg);">
+
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)"
+                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+
+                <div style="font-weight: 500; margin-bottom: 0.5rem;">Drop photos here or click to upload</div>
+                <div style="font-size: 0.875rem; color: var(--text-secondary);">Supports JPG, PNG, HEIC</div>
+
+                <input type="file" id="file-input" name="photos" multiple accept="image/*" required
+                    style="display: none;"
+                    onchange="document.getElementById('file-count').textContent = this.files.length + ' files selected'">
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="file-count" style="font-size: 0.875rem; color: var(--text-secondary);">No files
+                    selected</span>
+                <button type="submit" class="btn">
+                    Start Processing &rarr;
+                </button>
+            </div>
+        </form>
+        {% else %}
+        <div style="text-align: center; padding: 3rem 0;">
+            <div
+                style="display: inline-block; width: 3rem; height: 3rem; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem;">
+            </div>
+            <h3 style="margin: 0 0 0.5rem 0;">Workflow Running</h3>
+            <p style="color: var(--text-secondary); margin: 0;">Processing your photos...</p>
+        </div>
+        <style>
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+        </style>
+        {% endif %}
+    </div>
+
+    <!-- Recent Runs List -->
+    <div>
+        <h2 style="margin-top: 0; margin-bottom: 1.5rem;">Recent Runs</h2>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            {% for run in runs %}
+            <div class="card"
+                style="margin-bottom: 0; padding: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">{{ run.timestamp }}</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                        {{ run.images }} images processed • {{ run.selected }} selected
+                    </div>
+                </div>
+                <a href="/report/{{ run.timestamp }}" class="btn"
+                    style="background-color: white; color: var(--text-main); border: 1px solid var(--border); padding: 0.5rem 1rem; font-size: 0.875rem;">
+                    View Report
+                </a>
+            </div>
+            {% else %}
+            <div class="card" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                No runs found yet. Start one!
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if current_run.status == 'running' %}
+<script>
+    // Simple polling to refresh page when run completes
+    setInterval(function () {
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status !== 'running') {
+                    window.location.reload();
+                }
+            });
+    }, 2000);
+</script>
+{% endif %}
+{% endblock %}

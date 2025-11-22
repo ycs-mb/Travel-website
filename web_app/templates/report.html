@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem;">
+    <a href="/" class="btn" style="background: white; color: var(--text-main); border: 1px solid var(--border);">
+        &larr; Dashboard
+    </a>
+    <h1 style="margin: 0;">Run Report: {{ timestamp }}</h1>
+</div>
+
+<!-- Stats Overview -->
+<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 3rem;">
+    <div class="card" style="text-align: center; padding: 2rem;">
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Images Processed</div>
+        <div style="font-size: 2.5rem; font-weight: 700; color: var(--primary);">{{ report.num_images_ingested }}</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 2rem;">
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Selected</div>
+        <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent);">{{ report.num_images_final_selected }}
+        </div>
+    </div>
+    <div class="card" style="text-align: center; padding: 2rem;">
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Avg Tech Score</div>
+        <div style="font-size: 2.5rem; font-weight: 700;">{{ report.average_technical_score }}<span
+                style="font-size: 1rem; color: var(--text-tertiary);">/5</span></div>
+    </div>
+    <div class="card" style="text-align: center; padding: 2rem;">
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Avg Aesthetic Score</div>
+        <div style="font-size: 2.5rem; font-weight: 700;">{{ report.average_aesthetic_score }}<span
+                style="font-size: 1rem; color: var(--text-tertiary);">/5</span></div>
+    </div>
+</div>
+
+<h2>Processed Images</h2>
+<div class="grid">
+    {% for image_id, data in images.items() %}
+    <div class="card" style="padding: 0; overflow: hidden; display: flex; flex-direction: column;">
+        <!-- Image Preview -->
+        <div style="position: relative; aspect-ratio: 3/2; background-color: #f1f5f9;">
+            <img src="/images/{{ timestamp }}/{{ data.metadata.filename }}" alt="Photo"
+                style="width: 100%; height: 100%; object-fit: cover;">
+
+            <div style="position: absolute; top: 1rem; right: 1rem; display: flex; gap: 0.5rem;">
+                <span class="badge"
+                    style="background-color: rgba(255,255,255,0.9); color: var(--text-main); backdrop-filter: blur(4px);">
+                    Tech: {{ data.quality_score }}
+                </span>
+                <span class="badge"
+                    style="background-color: rgba(255,255,255,0.9); color: var(--text-main); backdrop-filter: blur(4px);">
+                    Art: {{ data.aesthetic_score }}
+                </span>
+            </div>
+
+            <div style="position: absolute; bottom: 1rem; left: 1rem;">
+                <span class="badge {{ 'badge-success' if data.passes_filter else 'badge-warning' }}">
+                    {{ data.category }}
+                </span>
+            </div>
+        </div>
+
+        <!-- Agent Outputs Tabs -->
+        <div style="padding: 1.5rem; flex: 1;">
+            <div style="margin-bottom: 1rem;">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 1.125rem;">{{ data.metadata.filename }}</h3>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;">
+                    {{ data.captions.concise if data.captions else 'No caption generated' }}
+                </p>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" data-target="tab-meta">Metadata</div>
+                <div class="tab" data-target="tab-quality">Quality</div>
+                <div class="tab" data-target="tab-aesthetic">Aesthetic</div>
+                <div class="tab" data-target="tab-filtering">Filtering</div>
+                <div class="tab" data-target="tab-caption">Caption</div>
+            </div>
+
+            <!-- Metadata Tab -->
+            <div class="tab-content tab-meta active">
+                <div class="data-row">
+                    <span class="data-label">Date</span>
+                    <span class="data-value">{{ data.metadata.capture_datetime or 'Unknown' }}</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Camera</span>
+                    <span class="data-value">
+                        {% if data.metadata.camera_settings and data.metadata.camera_settings.camera_model %}
+                        {{ data.metadata.camera_settings.camera_model }}
+                        {% else %}
+                        Unknown
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Location</span>
+                    <span class="data-value">
+                        {% if data.metadata.gps and data.metadata.gps.location %}
+                        {{ data.metadata.gps.location }}
+                        {% elif data.metadata.gps and data.metadata.gps.latitude %}
+                        {{ data.metadata.gps.latitude }}, {{ data.metadata.gps.longitude }}
+                        {% else %}
+                        Unknown
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Dimensions</span>
+                    <span class="data-value">
+                        {% if data.metadata.dimensions %}
+                        {{ data.metadata.dimensions.width }} x {{ data.metadata.dimensions.height }}
+                        {% else %}
+                        Unknown
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Quality Tab -->
+            <div class="tab-content tab-quality">
+                <div class="data-row">
+                    <span class="data-label">Overall Score</span>
+                    <span class="data-value" style="color: var(--primary); font-weight: 700;">{{ data.quality_score
+                        }}/5</span>
+                </div>
+                {% if data.quality %}
+                <div class="data-row">
+                    <span class="data-label">Sharpness</span>
+                    <span class="data-value">{{ data.quality.sharpness }}/5</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Noise</span>
+                    <span class="data-value">{{ data.quality.noise }}/5</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Exposure</span>
+                    <span class="data-value">{{ data.quality.exposure }}/5</span>
+                </div>
+                {% endif %}
+
+                {% if data.quality and data.quality.issues %}
+                <div style="margin-top: 1rem; font-size: 0.875rem;">
+                    <strong>Issues Found:</strong>
+                    <ul style="margin: 0.5rem 0; padding-left: 1.5rem; color: var(--text-secondary);">
+                        {% for issue in data.quality.issues %}
+                        <li>{{ issue }}</li>
+                        {% else %}
+                        <li style="color: #166534;">No major issues detected</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Aesthetic Tab -->
+            <div class="tab-content tab-aesthetic">
+                <div class="data-row">
+                    <span class="data-label">Overall Score</span>
+                    <span class="data-value" style="color: var(--accent); font-weight: 700;">{{ data.aesthetic_score
+                        }}/5</span>
+                </div>
+                {% if data.aesthetic %}
+                <div class="data-row">
+                    <span class="data-label">Composition</span>
+                    <span class="data-value">{{ data.aesthetic.composition }}/5</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Lighting</span>
+                    <span class="data-value">{{ data.aesthetic.lighting }}/5</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Framing</span>
+                    <span class="data-value">{{ data.aesthetic.framing }}/5</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Subject</span>
+                    <span class="data-value">{{ data.aesthetic.subject_interest }}/5</span>
+                </div>
+
+                <div style="margin-top: 1rem; font-size: 0.875rem;">
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong>Analysis:</strong>
+                        <p style="margin: 0.25rem 0; color: var(--text-secondary); line-height: 1.5;">
+                            {{ data.aesthetic.notes }}
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if data.aesthetic and data.aesthetic.token_usage %}
+                <div
+                    style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--text-tertiary); display: flex; justify-content: space-between;">
+                    <span>Token Usage: <strong>{{ data.aesthetic.token_usage.total_token_count }}</strong></span>
+                    <span>(Prompt: {{ data.aesthetic.token_usage.prompt_token_count }} | Response: {{
+                        data.aesthetic.token_usage.candidates_token_count }})</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Filtering Tab -->
+            <div class="tab-content tab-filtering">
+                {% if data.filtering %}
+                <div class="data-row">
+                    <span class="data-label">Status</span>
+                    <span class="data-value">
+                        <span class="badge {{ 'badge-success' if data.passes_filter else 'badge-warning' }}">
+                            {{ 'Passed' if data.passes_filter else 'Rejected' }}
+                        </span>
+                    </span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Category</span>
+                    <span class="data-value">{{ data.category }}</span>
+                </div>
+
+                <div style="margin-top: 1rem; font-size: 0.875rem;">
+                    <strong>Reasoning:</strong>
+                    <p style="margin: 0.5rem 0; color: var(--text-secondary);">
+                        {{ data.filtering.reasoning }}
+                    </p>
+                </div>
+                {% else %}
+                <p style="color: var(--text-secondary);">No filtering data available</p>
+                {% endif %}
+
+                {% if data.filtering and data.filtering.token_usage %}
+                <div
+                    style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--text-tertiary); display: flex; justify-content: space-between;">
+                    <span>Token Usage: <strong>{{ data.filtering.token_usage.total_token_count }}</strong></span>
+                    <span>(Prompt: {{ data.filtering.token_usage.prompt_token_count }} | Response: {{
+                        data.filtering.token_usage.candidates_token_count }})</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Caption Tab -->
+            <div class="tab-content tab-caption">
+                {% if data.captions %}
+                <div style="font-size: 0.875rem;">
+                    <div style="margin-bottom: 1rem;">
+                        <strong>Concise Caption:</strong>
+                        <p style="margin: 0.25rem 0; color: var(--text-main); font-weight: 500;">
+                            {{ data.captions.concise }}
+                        </p>
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <strong>Standard Caption:</strong>
+                        <p style="margin: 0.25rem 0; color: var(--text-secondary); line-height: 1.6;">
+                            {{ data.captions.standard }}
+                        </p>
+                    </div>
+                    <div>
+                        <strong>Hashtags:</strong>
+                        <p style="margin: 0.5rem 0; color: var(--accent);">
+                            {% for tag in data.captions.hashtags %}
+                            #{{ tag }}
+                            {% endfor %}
+                        </p>
+                    </div>
+                </div>
+                {% else %}
+                <p style="color: var(--text-secondary); font-size: 0.875rem;">No captions available</p>
+                {% endif %}
+
+                {% if data.captions and data.captions.token_usage %}
+                <div
+                    style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--text-tertiary); display: flex; justify-content: space-between;">
+                    <span>Token Usage: <strong>{{ data.captions.token_usage.total_token_count }}</strong></span>
+                    <span>(Prompt: {{ data.captions.token_usage.prompt_token_count }} | Response: {{
+                        data.captions.token_usage.candidates_token_count }})</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

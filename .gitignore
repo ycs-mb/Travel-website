@@ -49,6 +49,9 @@ output/
 cache/
 sample_images/*
 !sample_images/.gitkeep
+uploads/
+archive/
+
 
 # Logs
 *.log

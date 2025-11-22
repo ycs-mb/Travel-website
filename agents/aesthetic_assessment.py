@@ -11,7 +11,8 @@ import re
 import io
 
 from PIL import Image
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
@@ -67,13 +68,22 @@ class AestheticAssessmentAgent:
 
         # Configure Gemini API
         self.api_config = config.get('api', {}).get('google', {})
-        self.model_name = self.api_config.get('model', 'gemini-2.5-flash-lite')
+        self.model_name = self.api_config.get('model')
+        if not self.model_name:
+            log_warning(self.logger, "Google API model not specified in config, defaulting to 'gemini-1.5-flash'", "Aesthetic Assessment")
+            self.model_name = "gemini-1.5-flash"
 
-        api_key = os.getenv('GOOGLE_API_KEY')
-        if api_key:
-            genai.configure(api_key=api_key)
-        else:
-            log_warning(self.logger, "GOOGLE_API_KEY not set, Gemini API calls will fail", "Aesthetic Assessment")
+        # Initialize Vertex AI client
+        try:
+            self.client = genai.Client(
+                vertexai=True,
+                project=self.api_config.get('project'),
+                location=self.api_config.get('location', 'us-central1')
+            )
+            log_info(self.logger, f"Initialized Vertex AI client for project {self.api_config.get('project')}", "Aesthetic Assessment")
+        except Exception as e:
+            log_warning(self.logger, f"Failed to initialize Vertex AI client: {e}", "Aesthetic Assessment")
+            self.client = None
 
     def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
         """
@@ -144,15 +154,20 @@ class AestheticAssessmentAgent:
                 }
                 media_type = media_type_map.get(suffix, 'image/jpeg')
 
-            # Call Gemini Vision API
-            model = genai.GenerativeModel(self.model_name)
-            response = model.generate_content([
-                prompt,
-                {
-                    "mime_type": media_type,
-                    "data": image_data,
-                }
-            ])
+            # Call Gemini Vision API via Vertex AI
+            if not self.client:
+                raise Exception("Vertex AI client not initialized")
+            
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    types.Part.from_bytes(
+                        data=base64.standard_b64decode(image_data),
+                        mime_type=media_type
+                    )
+                ]
+            )
 
             # Parse response
             response_text = response.text
@@ -160,6 +175,15 @@ class AestheticAssessmentAgent:
 
             # Extract JSON from response
             assessment = self._parse_vlm_response(response_text)
+            
+            # Add token usage metadata
+            if hasattr(response, 'usage_metadata'):
+                assessment['token_usage'] = {
+                    'prompt_token_count': response.usage_metadata.prompt_token_count,
+                    'candidates_token_count': response.usage_metadata.candidates_token_count,
+                    'total_token_count': response.usage_metadata.total_token_count
+                }
+            
             return assessment
 
         except Exception as e:
