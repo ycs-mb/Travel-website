@@ -28,133 +28,156 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2. Prepare Your Images
+### 2. Configure Vertex AI
 
 ```bash
-# Create images directory if needed
-mkdir -p sample_images
+# Install gcloud CLI if not already installed
+# Visit: https://cloud.google.com/sdk/docs/install
 
-# Copy your photos (JPG, PNG, HEIC, RAW formats supported)
-cp /path/to/your/photos/*.jpg sample_images/
+# Set up Application Default Credentials
+gcloud auth application-default login
+
+# Or use service account key
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
 ```
 
-### 3. Configure (Optional)
+### 3. Update Configuration
 
 ```bash
-# Edit config.yaml to adjust:
-# - Quality thresholds
-# - API models
-# - Parallel workers
-
+# Edit config.yaml
 nano config.yaml
-```
 
-### 4. Add API Keys (Optional)
-
-```bash
-# Edit .env for actual VLM/LLM features
-# OPENAI_API_KEY=sk-...
-# GOOGLE_API_KEY=AIza...
-
-nano .env
+# Set your Vertex AI settings:
+vertex_ai:
+  project: "your-google-cloud-project-id"
+  location: "us-central1"  # or your preferred region
+  model: "gemini-1.5-flash"
 ```
 
 ---
 
-## ▶️ Running the Workflow
+## ▶️ Running the Application
 
-### Complete Workflow
+### Web Application (Recommended)
 
 ```bash
-# Run with uv (recommended)
-uv run python orchestrator.py
+# Start Flask server with uv
+uv run python web_app/app.py
 
 # OR activate venv first
 source .venv/bin/activate
-python orchestrator.py
+python web_app/app.py
+
+# Access at http://localhost:5001
 ```
 
-**Expected output:**
-```
-→ Loading configuration...
-→ Initializing 5 agents...
-→ Stage 1/3: Metadata Extraction...
-→ Stage 2/3: Quality & Aesthetic Assessment...
-→ Stage 3/3: Filtering & Caption Generation...
-→ Generating reports...
-✓ Workflow complete in ~10 minutes
+**Web Features:**
+- 📤 Drag-and-drop photo upload
+- 📊 Interactive tabbed reports
+- 📈 Run history and status tracking
+- 🎨 Clean SaaS UI design
+- 🔢 Token usage visualization
+
+### CLI Workflow (Alternative)
+
+```bash
+# Prepare images
+mkdir -p sample_images
+cp /path/to/your/photos/*.{jpg,png,heic} sample_images/
+
+# Run workflow
+uv run python orchestrator.py
+
+# Expected output:
+# → Loading configuration...
+# → Initializing 5 agents...
+# → Stage 1: Metadata Extraction...
+# → Stage 2: Quality & Aesthetic (Parallel)...
+# → Stage 3: Filtering & Captions...
+# ✓ Workflow complete
 ```
 
 ---
 
 ## 📊 View Results
 
-### Check Final Report
+### Web UI (Recommended)
+
+```bash
+# Navigate to http://localhost:5001
+# Click on any completed run
+# Explore tabbed interface:
+#   - Metadata: Date, camera, GPS location
+#   - Quality: Sharpness, noise, exposure
+#   - Aesthetic: Composition, lighting, framing
+#   - Filtering: Category, reasoning
+#   - Caption: Multi-level captions
+```
+
+### CLI Results
 
 ```bash
 # View summary statistics
-cat output/reports/final_report.json | jq .
+cat output/{timestamp}/reports/final_report.json | jq .
 
-# Pretty print
-cat output/reports/final_report.json | jq '.'
+# View metadata with locations
+cat output/{timestamp}/reports/metadata_extraction_output.json | jq '.[] | {filename, gps}'
+
+# View quality scores
+cat output/{timestamp}/reports/quality_assessment_output.json | jq '.[] | {filename, quality_score, sharpness, noise, exposure}'
+
+# View aesthetic scores
+cat output/{timestamp}/reports/aesthetic_assessment_output.json | jq '.[] | {filename, overall_aesthetic, composition, lighting}'
+
+# View filtering decisions
+cat output/{timestamp}/reports/filtering_categorization_output.json | jq '.[] | {filename, category, passes_filter, reasoning}'
+
+# View captions
+cat output/{timestamp}/reports/caption_generation_output.json | jq '.[] | {filename, captions}'
+```
+
+### Token Usage Analysis
+
+```bash
+# Check token consumption
+cat output/{timestamp}/reports/aesthetic_assessment_output.json | jq '.[] | {filename, token_usage}'
+cat output/{timestamp}/reports/caption_generation_output.json | jq '.[] | {filename, token_usage}'
+cat output/{timestamp}/reports/filtering_categorization_output.json | jq '.[] | {filename, token_usage}'
 ```
 
 ### View Logs
 
 ```bash
 # Real-time monitoring
-tail -f output/logs/workflow.log
+tail -f output/{timestamp}/logs/workflow.log
 
 # Check for errors
-cat output/logs/errors.json | jq '.[] | {agent, error_type, summary}'
+cat output/{timestamp}/logs/errors.json | jq '.[] | {agent, error_type, summary}'
 
 # Count errors by agent
-jq 'group_by(.agent) | map({agent: .[0].agent, count: length})' output/logs/errors.json
-```
-
-### Check Agent Outputs
-
-```bash
-# List all agent reports
-ls output/reports/
-
-# View metadata extraction results
-cat output/reports/metadata_extraction_output.json | jq '.[] | {image_id, filename, gps}'
-
-# View quality scores
-cat output/reports/quality_assessment_output.json | jq '.[] | {image_id, quality_score, sharpness, exposure}'
-
-# View captions
-cat output/reports/caption_generation_output.json | jq '.[] | {image_id, captions}'
+jq 'group_by(.agent) | map({agent: .[0].agent, count: length})' output/{timestamp}/logs/errors.json
 ```
 
 ---
 
-## 🌐 Launch Website
+## 🌐 Web Application Guide
 
-### Start Development Server
+### Upload Photos
 
-```bash
-cd output/website
+1. **Access Dashboard**: Open `http://localhost:5001`
+2. **Upload Images**: 
+   - Drag and drop photos onto upload zone
+   - Or click "Browse Files" to select
+3. **Submit**: Click "Upload and Process"
+4. **Monitor**: Watch progress in dashboard
 
-# Install dependencies
-npm install
+### View Reports
 
-# Run development server
-npm run dev
-
-# Server running at http://localhost:5173
-```
-
-### Build for Production
-
-```bash
-cd output/website
-
-npm run build
-
-# Outputs to dist/
-```
+1. **Run List**: See all processing runs with timestamps
+2. **Click Run**: Open detailed report
+3. **Browse Images**: Scroll through processed photos
+4. **View Details**: Click tabs for different agent outputs
+5. **Check Tokens**: See API usage at bottom of each tab
 
 ---
 
@@ -181,6 +204,8 @@ metadata_list, validation = agent.run(image_paths)
 print(f"Status: {validation['status']}")
 print(f"Image: {metadata_list[0]['filename']}")
 print(f"GPS: {metadata_list[0]['gps']}")
+if metadata_list[0]['gps'].get('location'):
+    print(f"Location: {metadata_list[0]['gps']['location']}")
 print(f"Camera: {metadata_list[0]['camera_settings']}")
 EOF
 ```
@@ -213,6 +238,7 @@ for q in quality_list:
     print(f"Image: {q['image_id']}")
     print(f"  Quality Score: {q['quality_score']}/5")
     print(f"  Sharpness: {q['sharpness']}, Exposure: {q['exposure']}, Noise: {q['noise']}")
+    print(f"  Issues: {q['issues']}")
 EOF
 ```
 
@@ -240,7 +266,10 @@ print(f"Status: {validation['status']}")
 for a in aesthetic_list:
     print(f"Image: {a['image_id']}")
     print(f"  Overall: {a['overall_aesthetic']}/5")
-    print(f"  Composition: {a['composition']}, Lighting: {a['lighting']}")
+    print(f"  Composition: {a['composition']}, Lighting: {a['lighting']}, Framing: {a['framing']}")
+    print(f"  Notes: {a['notes']}")
+    if 'token_usage' in a:
+        print(f"  Tokens: {a['token_usage']['total_token_count']}")
 EOF
 ```
 
@@ -279,8 +308,10 @@ print(f"Status: {validation['status']}")
 for c in categories:
     print(f"Image: {c['image_id']}")
     print(f"  Category: {c['category']}")
-    print(f"  Location: {c['location']}")
     print(f"  Passes Filter: {c['passes_filter']}")
+    print(f"  Reasoning: {c['reasoning']}")
+    if 'token_usage' in c:
+        print(f"  Tokens: {c['token_usage']['total_token_count']}")
 EOF
 ```
 
@@ -324,7 +355,9 @@ for cap in captions:
     print(f"Image: {cap['image_id']}")
     print(f"  Concise: {cap['captions']['concise']}")
     print(f"  Standard: {cap['captions']['standard']}")
-    print(f"  Keywords: {', '.join(cap['keywords'])}")
+    print(f"  Keywords: {', '.join(cap['keywords'])}") 
+    if 'token_usage' in cap:
+        print(f"  Tokens: {cap['token_usage']['total_token_count']}")
 EOF
 ```
 
@@ -335,13 +368,16 @@ EOF
 ```
 Travel-website/
 ├── config.yaml                 # Configuration file
-├── .env                        # API keys (don't commit!)
-├── orchestrator.py             # Main entry point
+├── .env                        # Environment variables (don't commit!)
+├── web_app/
+│   └── app.py                 # Flask web server (start here!)
+├── orchestrator.py             # CLI workflow entry point
 │
-├── sample_images/              # Add your photos here
+├── sample_images/              # Add your photos here (CLI mode)
 │   ├── photo1.jpg
-│   ├── photo2.jpg
 │   └── ...
+│
+├── uploads/                    # Web upload temporary storage
 │
 ├── agents/                     # Agent implementations
 │   ├── metadata_extraction.py
@@ -353,20 +389,13 @@ Travel-website/
 ├── utils/                      # Shared utilities
 │   ├── logger.py              # Logging
 │   ├── validation.py          # Schemas
-│   ├── helpers.py             # File I/O
-│   └── errors.py              # Error tracking
+│   └── helpers.py             # File I/O
 │
-└── output/                     # Generated outputs
-    ├── reports/               # Agent outputs + final report
-    ├── logs/                  # Workflow logs
-    ├── metadata/              # EXIF cache
-    └── website/               # React app
-        ├── src/
-        ├── public/
-        │   └── data/
-        │       └── photos.json
-        ├── package.json
-        └── README.md
+└── output/                     # Generated outputs (timestamped)
+    └── YYYYMMDD_HHMMSS/
+        ├── reports/           # Agent outputs + final report
+        ├── logs/              # Workflow logs
+        └── processed_images/  # Processed images
 ```
 
 ---
@@ -376,6 +405,12 @@ Travel-website/
 ### Key Settings in config.yaml
 
 ```yaml
+# Vertex AI Configuration
+vertex_ai:
+  project: "your-project-id"      # Your GCP project ID
+  location: "us-central1"         # GCP region
+  model: "gemini-1.5-flash"       # Model to use
+
 # Thresholds
 thresholds:
   min_technical_quality: 3      # Minimum quality score (1-5)
@@ -389,16 +424,11 @@ agents:
     parallel_workers: 2          # CPU bound
   aesthetic_assessment:
     parallel_workers: 2          # API rate limited
+    batch_size: 5
   filtering_categorization:
     parallel_workers: 2
   caption_generation:
     parallel_workers: 2
-
-# Models
-  aesthetic_assessment:
-    model: "claude-3.5-sonnet"
-  caption_generation:
-    model: "claude-3.5-sonnet"
 
 # Error handling
 error_handling:
@@ -410,7 +440,39 @@ error_handling:
 
 ## 🔧 Troubleshooting
 
-### Issue: "No images found"
+### Issue: "Vertex AI credentials not found"
+
+```bash
+# Set up ADC
+gcloud auth application-default login
+
+# Or use service account
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
+
+# Verify
+python -c "import google.auth; print(google.auth.default())"
+```
+
+### Issue: "Vertex AI API not enabled"
+
+```bash
+# Enable Vertex AI API
+gcloud services enable aiplatform.googleapis.com
+
+# Or visit: https://console.cloud.google.com/apis/library/aiplatform.googleapis.com
+```
+
+### Issue: "Port 5001 already in use"
+
+```bash
+# Check what's using the port
+lsof -i:5001
+
+# Kill the process or change port in app.py:
+# app.run(debug=True, port=5002)
+```
+
+### Issue: "No images found" (CLI mode)
 
 ```bash
 # Check that images exist
@@ -421,20 +483,6 @@ chmod 644 sample_images/*.jpg
 
 # Verify config paths
 cat config.yaml | grep input_images
-```
-
-### Issue: API Key Errors
-
-```bash
-# Verify .env file exists
-ls -la .env
-
-# Check API key format
-grep OPENAI_API_KEY .env
-grep GOOGLE_API_KEY .env
-
-# Test API access
-python -c "import os; print('OpenAI:', 'configured' if os.getenv('OPENAI_API_KEY') else 'missing')"
 ```
 
 ### Issue: Out of Memory
@@ -451,13 +499,14 @@ nano config.yaml
 
 ```bash
 # Monitor progress
-tail -f output/logs/workflow.log
+tail -f output/{timestamp}/logs/workflow.log
 
-# Check CPU usage
-top
+# Check Flask logs
+# (displayed in terminal where app.py is running)
 
-# Check memory usage
-free -h
+# Reduce batch size for API agents
+nano config.yaml
+# batch_size: 5  →  batch_size: 2
 ```
 
 ---
@@ -469,26 +518,31 @@ free -h
 - **[UML_DIAGRAMS.md](./UML_DIAGRAMS.md)** - Class, sequence, component diagrams
 - **[ACTIVITY_DIAGRAM.md](./ACTIVITY_DIAGRAM.md)** - Workflow and execution flows
 - **[README.md](../README.md)** - Project overview and features
+- **[CLAUDE.md](../CLAUDE.md)** - AI assistant guidance
 
 ---
 
 ## 🎯 Next Steps
 
-1. **Add images** → `sample_images/`
-2. **Run workflow** → `uv run python orchestrator.py`
-3. **View results** → `cat output/reports/final_report.json`
-4. **Launch website** → `cd output/website && npm run dev`
-5. **Read detailed docs** → See Documentation Structure above
+1. **Start web app** → `uv run python web_app/app.py`
+2. **Upload photos** → Drag and drop on `http://localhost:5001`
+3. **Process images** → Click "Upload and Process"
+4. **View results** → Click on completed run
+5. **Explore tabs** → See metadata, quality, aesthetic, filtering, captions
+6. **Check tokens** → Monitor API usage at bottom of tabs
+7. **Read detailed docs** → See Documentation Structure above
 
 ---
 
 ## 💡 Tips
 
-- **First run takes longer** due to dependency loading
+- **Web UI is recommended** for ease of use and visualization
+- **First run takes longer** due to dependency loading and model initialization
 - **Subsequent runs faster** with warm caches
-- **Monitor logs** in real-time: `tail -f output/logs/workflow.log`
+- **Monitor token usage** to optimize API costs
 - **Adjust thresholds** for your use case in `config.yaml`
-- **Use API keys** for production-quality results
+- **Use reverse geocoding** to get location names from GPS coordinates
+- **Check filtering reasoning** to understand automated decisions
 
 ---
 

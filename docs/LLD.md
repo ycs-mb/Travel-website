@@ -6,17 +6,23 @@
 ## Agent 1: Metadata Extraction
 
 ### Purpose
-Extract comprehensive EXIF, GPS, and technical metadata from image files.
+Extract comprehensive EXIF, GPS, and technical metadata from image files with reverse geocoding for GPS coordinates.
 
 ### Specifications
 
 | Aspect | Details |
 |--------|---------|
 | **Type** | Library-based (deterministic) |
-| **I/O** | I/O bound |
+| **I/O** | I/O bound + Network (geocoding API) |
 | **Workers** | 4 (from config) |
-| **Model** | ExifTool / piexif / Pillow |
+| **Libraries** | Pillow, piexif, pillow-heif, geopy (Nominatim) |
 | **Timeout** | 10 seconds per image |
+
+### Key Features
+- ✅ Direct HEIC/HEIF reading (no conversion)
+- ✅ Reverse geocoding (GPS → location name)
+- ✅ Fallback datetime extraction from filename
+- ✅ Comprehensive camera settings extraction
 
 ### System Prompt
 ```
@@ -26,7 +32,7 @@ and extract comprehensive metadata using industry-leading methods.
 Extract the following for each image:
 - Filename, file size, format
 - Capture date/time (EXIF DateTime, DateTimeOriginal, DateTimeDigitized)
-- GPS coordinates (latitude, longitude, altitude) if available
+- GPS coordinates (latitude, longitude, altitude) with reverse geocoded location
 - Camera settings (ISO, aperture, shutter speed, focal length, camera model)
 - Full EXIF data including lens info, white balance, flash
 - Image dimensions and resolution
@@ -38,17 +44,6 @@ Flag images with:
 - Non-standard formats or encoding issues
 
 Output structured JSON with all extracted data and flags for review.
-```
-
-### Input Schema
-
-```json
-{
-  "image_paths": [
-    "path/to/image1.jpg",
-    "path/to/image2.png"
-  ]
-}
 ```
 
 ### Output Schema
@@ -65,14 +60,15 @@ Output structured JSON with all extracted data and flags for review.
   },
   "capture_datetime": "2024-06-15T14:30:45Z",
   "gps": {
-    "latitude": 40.7128,
-    "longitude": -74.0060,
-    "altitude": 15.5
+    "latitude": 49.398750,
+    "longitude": 8.672434,
+    "altitude": 115.5,
+    "location": "Church of the Holy Spirit, Fischmarkt, Altstadt, Heidelberg, Baden-Württemberg, 69117, Germany"
   },
   "camera_settings": {
     "iso": 200,
     "aperture": "f/2.8",
-    "shutter_speed": "1/125",
+    "shutter_speed": "1/125s",
     "focal_length": "50mm",
     "camera_model": "Canon EOS R5",
     "lens_model": "RF 50mm F1.2"
@@ -86,29 +82,23 @@ Output structured JSON with all extracted data and flags for review.
 }
 ```
 
-### Validation Schema
-
-```json
-{
-  "agent": "Metadata Extraction",
-  "stage": "ingestion",
-  "status": "success|warning|error",
-  "summary": "Extracted metadata from 150/150 images",
-  "issues": []
-}
-```
-
 ### Implementation Pattern
 
 ```python
+from geopy.geocoders import Nominatim
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 class MetadataExtractionAgent:
-    SYSTEM_PROMPT = "..."
+    SYSTEM_PROMPT = """..."""
 
     def __init__(self, config: Dict[str, Any], logger: logging.Logger):
         self.config = config
         self.logger = logger
         self.agent_config = config['agents']['metadata_extraction']
         self.parallel_workers = self.agent_config.get('parallel_workers', 4)
+        
+        # Initialize geocoder for reverse geocoding
+        self.geolocator = Nominatim(user_agent="travel-photo-workflow")
 
     def run(self, image_paths: List[Path]) -> Tuple[List[Dict], Dict]:
         """Extract metadata from all images."""
@@ -118,33 +108,33 @@ class MetadataExtractionAgent:
             results = [f.result() for f in as_completed(futures)]
         return results, validation_summary
 
-    def process_image(self, image_path: Path) -> Dict[str, Any]:
-        """Extract metadata from single image."""
-        try:
-            # Use Pillow + piexif for EXIF data
-            img = Image.open(image_path)
-            exif_data = img._getexif() if hasattr(img, '_getexif') else {}
-
-            # Parse GPS from EXIF
-            gps = self._extract_gps(exif_data)
-
-            # Parse camera settings
-            settings = self._extract_camera_settings(exif_data)
-
-            result = {
-                'image_id': self._generate_image_id(image_path),
-                'filename': image_path.name,
-                'dimensions': {'width': img.width, 'height': img.height},
-                'gps': gps,
-                'camera_settings': settings,
-                'flags': []
-            }
-
-            is_valid, error = validate_agent_output('metadata_extraction', result)
-            return result
-        except Exception as e:
-            log_error(self.logger, "Metadata Extraction", "ProcessingError", str(e), "error")
-            return default_result
+    def extract_gps_info(self, exif_data: Dict) -> Dict[str, Optional[float]]:
+        """Extract GPS coordinates and reverse geocode to location."""
+        gps_info = {
+            "latitude": None,
+            "longitude": None,
+            "altitude": None,
+            "location": None
+        }
+        
+        # Extract coordinates from EXIF
+        # ... coordinate extraction logic ...
+        
+        # Reverse geocode to get location name
+        if gps_info['latitude'] and gps_info['longitude']:
+            try:
+                location_obj = self.geolocator.reverse(
+                    (gps_info['latitude'], gps_info['longitude']),
+                    exactly_one=True,
+                    language='en',
+                    timeout=10
+                )
+                if location_obj:
+                    gps_info['location'] = location_obj.address
+            except Exception as e:
+                self.logger.warning(f"Reverse geocoding failed: {e}")
+        
+        return gps_info
 ```
 
 ---
@@ -152,16 +142,16 @@ class MetadataExtractionAgent:
 ## Agent 2: Quality Assessment
 
 ### Purpose
-Evaluate technical quality (sharpness, exposure, noise) of images.
+Evaluate technical quality (sharpness, exposure, noise) using OpenCV algorithms.
 
 ### Specifications
 
 | Aspect | Details |
 |--------|---------|
-| **Type** | ML Model + VLM |
+| **Type** | OpenCV-based (algorithmic) |
 | **I/O** | CPU bound |
 | **Workers** | 2 |
-| **Models** | CLIP-IQA / MUSIQ / GPT-4 Vision |
+| **Libraries** | OpenCV, NumPy |
 | **Timeout** | 30 seconds per image |
 
 ### System Prompt
@@ -170,33 +160,12 @@ You are an elite image quality analyst with expertise in computational photograp
 Evaluate each photograph using state-of-the-art quality metrics.
 
 Assess the following technical dimensions:
-1. Sharpness/Focus Quality (1-5): Measure edge acuity and blur
+1. Sharpness/Focus Quality (1-5): Measure edge acuity and blur using Laplacian variance
 2. Exposure (1-5): Evaluate histogram distribution, clipping, dynamic range
-3. Noise Level (1-5): Detect ISO noise, compression artifacts
+3. Noise Level (1-5): Detect ISO noise, compression artifacts using patch variance
 4. Resolution Adequacy (1-5): Assess if resolution meets modern standards
-5. Overall Technical Score (1-5): Weighted composite of above metrics
-
-Detection criteria:
-- Overexposed: >5% pixels at 255 in any channel
-- Underexposed: >10% pixels at 0
-- Motion blur: Edge analysis variance below threshold
-- High noise: Grain/artifact detection in smooth areas
-- Low resolution: <2MP or <1920px on long edge
 
 Provide structured output with scores and detected issues.
-```
-
-### Input Schema
-
-```json
-{
-  "image_id": "img_001",
-  "image_path": "path/to/image.jpg",
-  "metadata": {
-    "dimensions": {"width": 4000, "height": 3000},
-    "camera_model": "Canon EOS R5"
-  }
-}
 ```
 
 ### Output Schema
@@ -209,25 +178,49 @@ Provide structured output with scores and detected issues.
   "exposure": 5,
   "noise": 3,
   "resolution": 5,
-  "issues": [],
+  "issues": ["slight_noise"],
   "metrics": {
-    "blur_variance": 0.85,
+    "blur_variance": 285.5,
     "histogram_clipping_percent": 2.3,
     "snr_db": 28.5
   }
 }
 ```
 
-### Validation Schema
+### Key Algorithms
 
-```json
-{
-  "agent": "Technical Assessment",
-  "stage": "scoring",
-  "status": "success|warning|error",
-  "summary": "Assessed quality of 150/150 images",
-  "issues": []
-}
+**Sharpness (Laplacian Variance):**
+```python
+def assess_sharpness(self, image: np.ndarray) -> tuple[int, float]:
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    variance = laplacian.var()
+    
+    # Score based on variance thresholds
+    if variance > 500: score = 5
+    elif variance > 300: score = 4
+    elif variance > 150: score = 3
+    elif variance > 75: score = 2
+    else: score = 1
+    
+    return score, variance
+```
+
+**Noise (Patch Variance):**
+```python
+def assess_noise(self, image: np.ndarray) -> tuple[int, float]:
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    patches = extract_smooth_patches(gray)
+    variance = np.mean([np.var(patch) for patch in patches])
+    
+    # Lower variance = less noise = higher score
+    if variance < 50: score = 5
+    elif variance < 100: score = 4
+    elif variance < 200: score = 3
+    elif variance < 400: score = 2
+    else: score = 1
+    
+    return score, variance
 ```
 
 ---
@@ -235,7 +228,7 @@ Provide structured output with scores and detected issues.
 ## Agent 3: Aesthetic Assessment
 
 ### Purpose
-Evaluate artistic quality (composition, framing, lighting) using vision models.
+Evaluate artistic quality (composition, framing, lighting) using Vertex AI (Gemini Vision).
 
 ### Specifications
 
@@ -244,9 +237,10 @@ Evaluate artistic quality (composition, framing, lighting) using vision models.
 | **Type** | VLM (Vision Language Model) |
 | **I/O** | API bound |
 | **Workers** | 2 |
-| **Models** | Claude 3.5 Sonnet / GPT-4 Vision / Gemini 1.5 |
-| **Batch Size** | 5-10 images |
+| **Model** | Gemini 1.5 Flash (Vertex AI) |
+| **Batch Size** | 5 images |
 | **Timeout** | 60 seconds per image |
+| **Token Tracking** | ✅ Enabled |
 
 ### System Prompt
 ```
@@ -267,21 +261,7 @@ Scoring guidelines:
 - 2: Acceptable but unremarkable
 - 1: Poor aesthetic value
 
-Consider genre-specific criteria for travel photography: sense of place,
-cultural context, human interest.
-```
-
-### Input Schema
-
-```json
-{
-  "image_id": "img_001",
-  "image_path": "path/to/image.jpg",
-  "metadata": {
-    "capture_datetime": "2024-06-15T14:30:45Z",
-    "gps": {"latitude": 40.7128, "longitude": -74.0060}
-  }
-}
+Provide structured JSON output with scores and brief notes.
 ```
 
 ### Output Schema
@@ -294,20 +274,67 @@ cultural context, human interest.
   "lighting": 5,
   "subject_interest": 4,
   "overall_aesthetic": 4,
-  "notes": "Excellent golden hour shot with strong compositional elements"
+  "notes": "Excellent golden hour shot with strong compositional elements",
+  "token_usage": {
+    "prompt_token_count": 312,
+    "candidates_token_count": 89,
+    "total_token_count": 401
+  }
 }
 ```
 
-### Validation Schema
+### Implementation Pattern
 
-```json
-{
-  "agent": "Aesthetic Assessment",
-  "stage": "rating",
-  "status": "success|warning|error",
-  "summary": "Rated aesthetics of 150/150 images",
-  "issues": []
-}
+```python
+from google import genai
+from google.genai import types
+
+class AestheticAssessmentAgent:
+    def __init__(self, config: Dict, logger: Logger):
+        self.config = config
+        self.logger = logger
+        self.agent_config = config['agents']['aesthetic_assessment']
+        self.parallel_workers = self.agent_config.get('parallel_workers', 2)
+        
+        # Vertex AI client initialization
+        vertex_config = config.get('vertex_ai', {})
+        self.client = genai.Client(
+            vertexai=True,
+            project=vertex_config.get('project'),
+            location=vertex_config.get('location')
+        )
+        self.model_name = vertex_config.get('model', 'gemini-1.5-flash')
+
+    def assess_with_vlm(self, image_path: Path) -> Dict[str, Any]:
+        """Assess aesthetics using Vertex AI."""
+        # Read and encode image
+        with open(image_path, 'rb') as f:
+            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+        
+        # Call Vertex AI
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=[
+                types.Part.from_text(text=self.SYSTEM_PROMPT),
+                types.Part.from_bytes(
+                    data=base64.standard_b64decode(image_data),
+                    mime_type='image/jpeg'
+                )
+            ]
+        )
+        
+        # Parse response
+        assessment = self._parse_vlm_response(response.text)
+        
+        # Extract token usage
+        if hasattr(response, 'usage_metadata'):
+            assessment['token_usage'] = {
+                'prompt_token_count': response.usage_metadata.prompt_token_count,
+                'candidates_token_count': response.usage_metadata.candidates_token_count,
+                'total_token_count': response.usage_metadata.total_token_count
+            }
+        
+        return assessment
 ```
 
 ---
@@ -315,65 +342,44 @@ cultural context, human interest.
 ## Agent 4: Filtering & Categorization
 
 ### Purpose
-Filter by quality thresholds and categorize images by content, location, time using Gemini Vision API.
+Filter by quality thresholds and categorize images by content using Vertex AI, with reasoning for decisions.
 
 ### Specifications
 
 | Aspect | Details |
 |--------|---------|
-| **Type** | VLM (Vision Language Model) + Rule-based |
+| **Type** | VLM + Rule-based |
 | **I/O** | API bound |
-| **Workers** | Sequential processing |
-| **Models** | Gemini 2.5 Flash Lite (default) |
-| **Batch Size** | Individual image processing |
+| **Workers** | 2 |
+| **Model** | Gemini 1.5 Flash (Vertex AI) |
 | **Timeout** | 45 seconds per image |
+| **Token Tracking** | ✅ Enabled |
+| **Reasoning** | ✅ Explains pass/reject |
 
 ### Categorization Taxonomy
 
 **By Subject:**
-- Landscape, Architecture, People/Portraits, Food, Wildlife, Urban, Cultural
+- Landscape, Architecture, People/Portraits, Food, Wildlife, Urban, Cultural, Adventure
 
 **By Time:**
 - Golden Hour, Blue Hour, Daytime, Night, Sunset/Sunrise
 
 **By Location:**
-- City/Country from GPS or EXIF
+- Extracted from GPS reverse geocoding or EXIF
 
-**By Activity:**
-- Adventure, Relaxation, Dining, Transportation, Events
+### Filtering Rules with Reasoning
 
-### Filtering Rules
-
-```
-if (technical_score < min_technical_quality):
-    passes_filter = False
-    flags.append("low_quality")
-
-if (aesthetic_score < min_aesthetic_quality):
-    passes_filter = False
-    flags.append("low_aesthetic")
-
-if (not has_gps_data):
-    flags.append("missing_gps")
-
-if (cannot_determine_category):
-    flags.append("uncategorized")
-```
-
-### Input Schema
-
-```json
-{
-  "image_id": "img_001",
-  "image_path": "path/to/image.jpg",
-  "metadata": {...},
-  "technical_score": 4,
-  "aesthetic_score": 4,
-  "filter_config": {
-    "min_technical": 3,
-    "min_aesthetic": 3
-  }
-}
+```python
+# Construct reasoning
+if passes_filter:
+    reasoning = f"Passed all criteria. Quality Score: {quality}/{min_quality}, Aesthetic Score: {aesthetic}/{min_aesthetic}."
+else:
+    reasons = []
+    if quality < min_quality:
+        reasons.append(f"Quality score ({quality}) below threshold ({min_quality})")
+    if aesthetic < min_aesthetic:
+        reasons.append(f"Aesthetic score ({aesthetic}) below threshold ({min_aesthetic})")
+    reasoning = f"Rejected: {'; '.join(reasons)}."
 ```
 
 ### Output Schema
@@ -386,9 +392,44 @@ if (cannot_determine_category):
   "time_category": "Golden Hour",
   "location": "Yosemite, California, USA",
   "passes_filter": true,
+  "reasoning": "Passed all criteria. Quality Score: 4/3, Aesthetic Score: 4/3.",
   "flagged": false,
-  "flags": []
+  "flags": [],
+  "token_usage": {
+    "prompt_token_count": 189,
+    "candidates_token_count": 67,
+    "total_token_count": 256
+  }
 }
+```
+
+### Implementation Pattern
+
+```python
+def categorize_by_content(self, image_path: Path) -> tuple[str, List[str], dict]:
+    """Categorize using Vertex AI with token tracking."""
+    # Call Vertex AI
+    response = self.client.models.generate_content(
+        model=self.model_name,
+        contents=[
+            types.Part.from_text(text=prompt),
+            types.Part.from_bytes(data=image_bytes, mime_type=media_type)
+        ]
+    )
+    
+    # Parse categories
+    main_cat, subcats = self._parse_categorization_response(response.text)
+    
+    # Extract token usage
+    token_usage = None
+    if hasattr(response, 'usage_metadata'):
+        token_usage = {
+            'prompt_token_count': response.usage_metadata.prompt_token_count,
+            'candidates_token_count': response.usage_metadata.candidates_token_count,
+            'total_token_count': response.usage_metadata.total_token_count
+        }
+    
+    return main_cat, subcats, token_usage
 ```
 
 ---
@@ -396,7 +437,7 @@ if (cannot_determine_category):
 ## Agent 5: Caption Generation
 
 ### Purpose
-Generate multi-level captions (concise/standard/detailed) with keywords, leveraging context from all upstream agents.
+Generate multi-level captions (concise/standard/detailed) with keywords using Vertex AI.
 
 ### Specifications
 
@@ -405,9 +446,9 @@ Generate multi-level captions (concise/standard/detailed) with keywords, leverag
 | **Type** | VLM (Vision Language Model) |
 | **I/O** | API bound |
 | **Workers** | 2 |
-| **Models** | Gemini 2.5 Flash Lite (default) |
-| **Batch Size** | Sequential processing |
+| **Model** | Gemini 1.5 Flash (Vertex AI) |
 | **Timeout** | 45 seconds per image |
+| **Token Tracking** | ✅ Enabled |
 
 ### System Prompt
 ```
@@ -427,52 +468,7 @@ Incorporate:
 - Emotional resonance and storytelling
 - Keywords for searchability
 
-Avoid clichés; be specific and authentic.
-```
-
-### Caption Levels
-
-| Level | Format | Length | Example |
-|-------|--------|--------|---------|
-| **Concise** | Twitter-style | <100 chars | "Golden sunset over Santorini's blue domes" |
-| **Standard** | Instagram-style | 150-250 chars | "As the sun dips below the Aegean Sea, Santorini's famous blue-domed churches glow in golden light..." |
-| **Detailed** | Editorial-style | 300-500 chars | "This photograph captures the quintessential Santorini experience during golden hour. The iconic blue-domed churches of Oia, with their striking contrast against white-washed walls, are bathed in warm sunset light..." |
-
-### Input Schema
-
-**Receives comprehensive context from all upstream agents:**
-
-```json
-{
-  "image_id": "img_001",
-  "image_path": "path/to/image.jpg",
-  "metadata": {
-    "capture_datetime": "2024-06-15T14:30:45Z",
-    "gps": {"latitude": 40.7128, "longitude": -74.0060},
-    "camera_settings": {
-      "iso": 200,
-      "aperture": "f/2.8",
-      "camera_model": "Canon EOS R5"
-    }
-  },
-  "quality_assessment": {
-    "quality_score": 4,
-    "sharpness": 4,
-    "exposure": 5,
-    "noise": 3
-  },
-  "aesthetic_assessment": {
-    "overall_aesthetic": 4,
-    "composition": 5,
-    "lighting": 5
-  },
-  "categorization": {
-    "category": "Landscape",
-    "subcategories": ["Mountain", "Sunset"],
-    "time_category": "Golden Hour",
-    "location": "Yosemite, CA"
-  }
-}
+Respond in JSON format with all three caption levels and keywords array.
 ```
 
 ### Output Schema
@@ -481,41 +477,163 @@ Avoid clichés; be specific and authentic.
 {
   "image_id": "img_001",
   "captions": {
-    "concise": "Golden sunset over iconic blue domes",
-    "standard": "Santorini's famous blue-domed churches glow in golden hour light...",
-    "detailed": "This photograph captures the quintessential Santorini experience..."
+    "concise": "Golden sunset over Santorini's iconic blue domes",
+    "standard": "As the sun dips below the Aegean Sea, Santorini's famous blue-domed churches glow in golden light, creating the quintessential Greek island moment.",
+    "detailed": "This photograph captures the quintessential Santorini experience during golden hour. The iconic blue-domed churches of Oia, with their striking contrast against white-washed walls, are bathed in warm sunset light. Shot at f/2.8 with the Canon EOS R5, the image showcases the romantic beauty that has made this Cycladic island one of the world's most photographed destinations."
   },
-  "keywords": ["sunset", "architecture", "mediterranean", "travel", "golden-hour"]
+  "keywords": ["sunset", "architecture", "mediterranean", "travel", "golden-hour", "greece", "santorini"],
+  "token_usage": {
+    "prompt_token_count": 567,
+    "candidates_token_count": 198,
+    "total_token_count": 765
+  }
 }
 ```
 
-### Implementation Details
+### Context Integration
 
-The caption agent uses all upstream data to create rich, contextual captions:
+The caption agent receives full context from all upstream agents:
 
-1. **From Metadata Agent (Agent 1):**
-   - Location (GPS coordinates)
-   - Camera settings for technical details
-   - Capture time for temporal context
+```python
+def _call_llm_api(self, image_path, metadata, quality, aesthetic, category):
+    """Generate captions with full context."""
+    # Build comprehensive prompt with all upstream data
+    context = f"""
+CONTEXT:
+- Location: {category.get('location', 'Unknown')}
+- Category: {category.get('category', 'Scene')}
+- Time: {category.get('time_category', 'Daytime')}
+- Quality Score: {quality.get('quality_score', 3)}/5
+- Aesthetic Score: {aesthetic.get('overall_aesthetic', 3)}/5
+- Camera: {metadata.get('camera_settings', {}).get('camera_model', 'Camera')}
+- Settings: ISO {metadata.get('camera_settings', {}).get('iso', 'auto')}, {metadata.get('camera_settings', {}).get('aperture', 'N/A')}
+"""
+    
+    # Call Vertex AI with image and context
+    response = self.client.models.generate_content(...)
+    
+    # Extract captions and token usage
+    captions = self._parse_caption_response(response.text)
+    if hasattr(response, 'usage_metadata'):
+        captions['token_usage'] = {...}
+    
+    return captions
+```
 
-2. **From Quality Agent (Agent 2):**
-   - Technical quality score
-   - Specific metrics (sharpness, exposure, noise)
+---
 
-3. **From Aesthetic Agent (Agent 3):**
-   - Aesthetic quality score
-   - Composition and lighting notes
+## Web Application Integration
 
-4. **From Filtering Agent (Agent 4):**
-   - Main category and subcategories
-   - Time of day classification
-   - Location information
+### Flask Route Patterns
 
-This comprehensive context enables the generation of accurate, engaging captions that incorporate both technical excellence and storytelling.
+```python
+from flask import Flask, render_template, request, jsonify
+import subprocess
+from pathlib import Path
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    """Dashboard with upload and run history."""
+    runs = []
+    output_dir = Path('output')
+    
+    # Get all timestamped run directories
+    for run_dir in sorted(output_dir.glob('2*'), reverse=True):
+        status = 'completed'  # Check if workflow.log shows completion
+        runs.append({
+            'timestamp': run_dir.name,
+            'status': status,
+            'link': f'/report/{run_dir.name}'
+        })
+    
+    return render_template('index.html', runs=runs)
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    """Handle photo upload and trigger workflow."""
+    files = request.files.getlist('photos')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Save uploaded files
+    upload_dir = Path('uploads') / timestamp
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    for file in files:
+        file.save(upload_dir / file.filename)
+    
+    # Trigger orchestrator in background
+    subprocess.Popen([
+        'python', 'orchestrator.py',
+        '--input', str(upload_dir),
+        '--output', f'output/{timestamp}'
+    ])
+    
+    return jsonify({'run_id': timestamp, 'status': 'running'})
+
+@app.route('/report/<timestamp>')
+def view_report(timestamp):
+    """Load and display detailed report."""
+    report_dir = Path('output') / timestamp / 'reports'
+    
+    # Load all agent outputs
+    images_data = {}
+    
+    # Load metadata
+    with open(report_dir / 'metadata_extraction_output.json') as f:
+        metadata = json.load(f)
+        for img in metadata:
+            images_data[img['image_id']] = {'metadata': img}
+    
+    # Load quality
+    with open(report_dir / 'quality_assessment_output.json') as f:
+        quality = json.load(f)
+        for img in quality:
+            if img['image_id'] in images_data:
+                images_data[img['image_id']]['quality'] = img
+    
+    # Load aesthetic
+    with open(report_dir / 'aesthetic_assessment_output.json') as f:
+        aesthetic = json.load(f)
+        for img in aesthetic:
+            if img['image_id'] in images_data:
+                images_data[img['image_id']]['aesthetic'] = img
+    
+    # Load filtering
+    with open(report_dir / 'filtering_categorization_output.json') as f:
+        filtering = json.load(f)
+        for img in filtering:
+            if img['image_id'] in images_data:
+                images_data[img['image_id']]['filtering'] = img
+    
+    # Load captions
+    with open(report_dir / 'caption_generation_output.json') as f:
+        captions = json.load(f)
+        for img in captions:
+            if img['image_id'] in images_data:
+                images_data[img['image_id']]['captions'] = img.get('captions', {})
+    
+    return render_template('report.html', images=images_data, timestamp=timestamp)
+```
 
 ---
 
 ## Validation Schemas
+
+### Token Usage Validation
+
+```python
+TOKEN_USAGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "prompt_token_count": {"type": "integer", "minimum": 0},
+        "candidates_token_count": {"type": "integer", "minimum": 0},
+        "total_token_count": {"type": "integer", "minimum": 0}
+    },
+    "required": ["total_token_count"]
+}
+```
 
 ### Agent Output Validation
 
@@ -527,128 +645,121 @@ AGENT_SCHEMAS = {
         "properties": {
             "image_id": {"type": "string"},
             "filename": {"type": "string"},
-            "dimensions": {"type": "object"},
             "gps": {
                 "type": "object",
                 "properties": {
                     "latitude": {"type": ["number", "null"]},
-                    "longitude": {"type": ["number", "null"]}
+                    "longitude": {"type": ["number", "null"]},
+                    "location": {"type": ["string", "null"]}  # Reverse geocoded
                 }
-            },
-            "flags": {"type": "array"}
+            }
+        }
+    },
+    'aesthetic_assessment': {
+        "type": "object",
+        "required": ["image_id", "overall_aesthetic"],
+        "properties": {
+            "token_usage": TOKEN_USAGE_SCHEMA  # Optional but validated if present
         }
     },
     # ... similar for all agents
 }
 ```
 
-### Validation Function Pattern
+---
 
-```python
-def validate_agent_output(agent_key: str, output: Dict) -> Tuple[bool, str]:
-    """Validate agent output against schema."""
-    schema = AGENT_SCHEMAS[agent_key]
-    try:
-        jsonschema.validate(output, schema)
-        return True, ""
-    except jsonschema.ValidationError as e:
-        return False, str(e)
+## Configuration Integration
+
+### Complete config.yaml Structure
+
+```yaml
+# Paths
+paths:
+  input_images: sample_images/
+  output_dir: output/
+  upload_dir: uploads/
+
+# Vertex AI Configuration (REQUIRED)
+vertex_ai:
+  project: "your-google-cloud-project-id"
+  location: "us-central1"  # or your preferred region  
+  model: "gemini-1.5-flash"
+
+# Agent-specific settings
+agents:
+  metadata_extraction:
+    enabled: true
+    parallel_workers: 4
+
+  quality_assessment:
+    enabled: true
+    parallel_workers: 2
+
+  aesthetic_assessment:
+    enabled: true
+    parallel_workers: 2
+    batch_size: 5
+
+  filtering_categorization:
+    enabled: true
+    parallel_workers: 2
+
+  caption_generation:
+    enabled: true
+    parallel_workers: 2
+
+# Quality thresholds
+thresholds:
+  min_technical_quality: 3
+  min_aesthetic_quality: 3
+
+# Error handling
+error_handling:
+  max_retries: 3
+  continue_on_error: true
 ```
 
 ---
 
 ## Error Handling Patterns
 
-### Try-Catch Template
+### Vertex AI Error Handling
 
 ```python
-def process_image(self, image_path: Path) -> Dict[str, Any]:
-    """Process with structured error handling."""
+def assess_with_vlm(self, image_path: Path) -> Dict[str, Any]:
+    """Assess with comprehensive error handling."""
     try:
-        # Core processing logic
-        result = {...}
-
-        # Validate output
-        is_valid, error_msg = validate_agent_output(self.agent_key, result)
-        if not is_valid:
-            log_error(self.logger, self.agent_name, "ValidationError",
-                     error_msg, "error")
-            return self.default_result()
-
+        response = self.client.models.generate_content(...)
+        
+        # Validate response
+        if not response.text:
+            raise ValueError("Empty response from Vertex AI")
+        
+        # Parse and validate
+        result = self._parse_vlm_response(response.text)
+        
+        # Extract token usage
+        if hasattr(response, 'usage_metadata'):
+            result['token_usage'] = {...}
+        
         return result
-
-    except APIError as e:
-        log_error(self.logger, self.agent_name, "APIError",
-                 str(e), "error", {"api": "gemini", "status": e.status})
-        return self.default_result()
-
+        
     except Exception as e:
-        log_error(self.logger, self.agent_name, "ProcessingError",
-                 str(e), "error")
-        return self.default_result()
-```
-
-### Default Result Pattern
-
-```python
-@staticmethod
-def default_result(image_id: str) -> Dict[str, Any]:
-    """Return placeholder result on error."""
-    return {
-        "image_id": image_id,
-        "quality_score": 0,
-        "aesthetic_score": 0,
-        "error": "Processing failed",
-        "flags": ["processing_error"]
-    }
-```
-
----
-
-## Configuration Integration
-
-### Agent Config Access Pattern
-
-```python
-class Agent:
-    def __init__(self, config: Dict, logger: Logger):
-        self.config = config
-        self.agent_config = config['agents']['agent_key']
-
-        # Extract settings
-        self.parallel_workers = self.agent_config.get('parallel_workers', 2)
-        self.batch_size = self.agent_config.get('batch_size', 10)
-        self.model = self.agent_config.get('model', 'default')
-        self.timeout_seconds = self.agent_config.get('timeout_seconds', 30)
-
-        # API config if needed
-        if self.agent_config.get('uses_api'):
-            self.api_config = config['api'][self.agent_config['api_provider']]
-```
-
-### config.yaml Structure
-
-```yaml
-agents:
-  metadata_extraction:
-    enabled: true
-    parallel_workers: 4
-    model: "pillow"
-
-  quality_assessment:
-    enabled: true
-    parallel_workers: 2
-    model: "clip-iqa"
-    timeout_seconds: 30
-
-  aesthetic_assessment:
-    enabled: true
-    parallel_workers: 2
-    model: "claude-3.5-sonnet"
-    uses_api: true
-    api_provider: "anthropic"
-    batch_size: 5
-    timeout_seconds: 60
+        log_error(
+            self.logger,
+            "Aesthetic Assessment",
+            "APIError",
+            f"Vertex AI call failed: {str(e)}",
+            "error"
+        )
+        return {
+            "composition": 3,
+            "framing": 3,
+            "lighting": 3,
+            "subject_interest": 3,
+            "overall_aesthetic": 3,
+            "notes": f"API error: {str(e)}"
+        }
 ```
 
 ---

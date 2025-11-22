@@ -2,11 +2,85 @@
 
 ---
 
+## System Overview Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    COMPLETE SYSTEM ARCHITECTURE                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ WEB APPLICATION LAYER (Flask)                                        │
+├──────────────────────────────────────────────────────────────────────┤
+│  app.py (Port 5001)                                                  │
+│  ├─ Routes: /, /upload, /report/<timestamp>, /status/<run_id>       │
+│  ├─ Templates: base.html, index.html, report.html                   │
+│  └─ Static: CSS (Clean SaaS design), JavaScript (tab switching)     │
+└────────────────────────────┬─────────────────────────────────────────┘
+                             │ HTTP
+                             │ POST /upload → triggers orchestrator
+                             ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ ORCHESTRATION LAYER                                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│  TravelPhotoOrchestrator                                             │
+│  ├─ Sequential: Agent 1 (Metadata)                                   │
+│  ├─ Parallel: Agents 2 & 3 (Quality, Aesthetic)                     │
+│  ├─ Sequential: Agent 4 (Filtering)                                  │
+│  └─ Sequential: Agent 5 (Captions)                                   │
+└────────────────────────────┬─────────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌─────────────┐    ┌──────────────┐    ┌──────────────────┐
+│  Agent 1    │    │  Agents 2-3  │    │  Agents 4-5      │
+│  Metadata   │    │  Assessment  │    │  Enrich          │
+│             │    │              │    │                  │
+│ • Pillow    │    │ • OpenCV     │    │ • Vertex AI      │
+│ • piexif    │    │ • NumPy      │    │ • Rules          │
+│ • geopy     │    │ • Vertex AI  │    │ • Token Track    │
+│             │    │ • Token Track│    │                  │
+└─────────────┘    └──────────────┘    └──────────────────┘
+        │                    │                    │
+        └────────────────────┼────────────────────┘
+                             ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ VERTEX AI INTEGRATION                                                │
+├──────────────────────────────────────────────────────────────────────┤
+│  google.genai.Client (vertexai=True)                                 │
+│  ├─ Project: your-gcp-project                                        │
+│  ├─ Location: us-central1                                            │
+│  ├─ Model: gemini-1.5-flash                                          │
+│  └─ Authentication: Application Default Credentials (ADC)            │
+└────────────────────────────┬─────────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ OUTPUT LAYER                                                         │
+├──────────────────────────────────────────────────────────────────────┤
+│  output/YYYYMMDD_HHMMSS/                                             │
+│  ├─ reports/                                                         │
+│  │  ├─ metadata_extraction_output.json                               │
+│  │  ├─ quality_assessment_output.json                                │
+│  │  ├─ aesthetic_assessment_output.json (+ token_usage)              │
+│  │  ├─ filtering_categorization_output.json (+ reasoning + tokens)   │
+│  │  ├─ caption_generation_output.json (+ token_usage)                │
+│  │  └─ final_report.json (+ total_tokens_used)                       │
+│  ├─ logs/                                                            │
+│  │  ├─ workflow.log                                                  │
+│  │  └─ errors.json                                                   │
+│  └─ processed_images/                                                │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Class Diagram: Agent Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      <<abstract>>                               │
+│                      <<interface>>                              │
 │                      BaseAgent                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │ - config: Dict[str, Any]                                        │
@@ -25,35 +99,50 @@
                               │
                 ┌─────────────┼─────────────┬──────────────┐
                 │             │             │              │
-    ┌───────────┴──────┐  ┌───┴────────┐  ┌┴──────────────┐  ...
+    ┌───────────┴──────┐  ┌───┴────────┐  ┌┴──────────────┐
     │  MetadataAgent   │  │QualityAgent│  │AestheticAgent │
     ├──────────────────┤  ├────────────┤  ├───────────────┤
-    │ - exif_parser    │  │ - iqa_model│  │ - vlm_client  │
-    │ - gps_geocoder   │  │ - cv2      │  │ - vision_api  │
+    │ - exif_parser    │  │ - cv2      │  │ - vertex_client│
+    │ - geolocator     │  │ - numpy    │  │ - model_name   │
+    │ (Nominatim)      │  │            │  │ - token_tracker│
     ├──────────────────┤  ├────────────┤  ├───────────────┤
     │ + run()          │  │ + run()    │  │ + run()       │
-    │ - extract_exif() │  │ - assess() │  │ - rate_image()│
-    └──────────────────┘  └────────────┘  └───────────────┘
+    │ - extract_exif() │  │ - assess() │  │ - assess_vlm()│
+    │ - extract_gps()  │  │ - sharpness│  │ - extract_toks│
+    │ - reverse_geo()  │  │ - exposure │  └───────────────┘
+    └──────────────────┘  │ - noise    │
+                          └────────────┘
 
-    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-    │DuplicateAgent    │  │FilteringAgent    │  │CaptionAgent      │
-    ├──────────────────┤  ├──────────────────┤  ├──────────────────┤
-    │ - clip_embedder  │  │ - vlm_classifier │  │ - llm_client     │
-    │ - hash_engine    │  │ - filter_rules   │  │ - prompt_builder │
-    ├──────────────────┤  ├──────────────────┤  ├──────────────────┤
-    │ + run()          │  │ + run()          │  │ + run()          │
-    │ - find_groups()  │  │ - categorize()   │  │ - generate_caps()│
-    └──────────────────┘  └──────────────────┘  └──────────────────┘
-
-    ┌──────────────────┐
-    │WebsiteAgent      │
-    ├──────────────────┤
-    │ - react_template │
-    │ - mui_config     │
-    ├──────────────────┤
-    │ + run()          │
-    │ - generate_jsx() │
+    ┌──────────────────┐  ┌──────────────────┐
+    │FilteringAgent    │  │CaptionAgent      │
+    ├──────────────────┤  ├──────────────────┤
+    │ - vertex_client  │  │ - vertex_client  │
+    │ - filter_rules   │  │ - model_name     │
+    │ - thresholds     │  │ - token_tracker  │
+    │ - reasoning_gen  │  │ - prompt_builder │
+    ├──────────────────┤  ├──────────────────┤
+    │ + run()          │  │ + run()          │
+    │ - categorize()   │  │ - generate_caps()│
+    │ - apply_filters()│  │ - extract_toks() │
+    │ - build_reason() │  │ - context_build()│
+    │ - extract_toks() │  └──────────────────┘
     └──────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      FlaskWebApp                                │
+├─────────────────────────────────────────────────────────────────┤
+│ - app: Flask                                                    │
+│ - upload_dir: Path                                              │
+│ - output_dir: Path                                              │
+├─────────────────────────────────────────────────────────────────┤
+│ + index() -> HTML (dashboard + upload)                          │
+│ + upload() -> JSON (run_id, status)                             │
+│ + view_report(timestamp) -> HTML (tabbed report)                │
+│ + check_status(run_id) -> JSON (status)                         │
+│ - get_all_runs() -> List[Dict]                                  │
+│ - load_agent_outputs(timestamp) -> Dict[str, Any]               │
+│ - trigger_orchestrator(upload_dir) -> subprocess                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -70,11 +159,14 @@
 │ - outputs: Dict[str, List[Dict]]                                 │
 │ - validations: List[Dict]                                        │
 │ - start_time: datetime                                           │
+│ - timestamp: str (YYYYMMDD_HHMMSS)                               │
+│ - output_dir: Path (output/{timestamp})                          │
 ├──────────────────────────────────────────────────────────────────┤
 │ + run_workflow() -> bool                                         │
 │ + _run_agent_stage(name, callable) -> (List[Dict], Dict)        │
 │ + _validate_workflow_outputs() -> bool                           │
 │ + _generate_final_report() -> Dict                               │
+│ + _calculate_token_totals() -> int                               │
 │ - _setup_logging() -> Logger                                     │
 │ - _ensure_directories() -> None                                  │
 │ - _load_images() -> List[Path]                                   │
@@ -83,16 +175,13 @@
 │ - _save_final_report() -> None                                   │
 └──────────────────────────────────────────────────────────────────┘
             │
-            │ uses
-            │ (composition)
+            │ uses (composition)
             │
             ├──→ Agent 1 (MetadataExtractionAgent)
             ├──→ Agent 2 (QualityAssessmentAgent)
             ├──→ Agent 3 (AestheticAssessmentAgent)
-            ├──→ Agent 4 (DuplicateDetectionAgent)
-            ├──→ Agent 5 (FilteringCategorizationAgent)
-            ├──→ Agent 6 (CaptionGenerationAgent)
-            └──→ Agent 7 (WebsiteGenerationAgent)
+            ├──→ Agent 4 (FilteringCategorizationAgent)
+            └──→ Agent 5 (CaptionGenerationAgent)
 ```
 
 ---
@@ -101,37 +190,57 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Sequence: Complete Workflow Execution                               │
+│ Sequence: Complete Workflow Execution (Web Upload)                  │
 └─────────────────────────────────────────────────────────────────────┘
 
-Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
-    │                  │                  │               │          │
-    │─load_images()──→ │                  │               │          │
-    │                  │                  │               │          │
-    │                  │──extract_metadata→               │          │
-    │◄─────output1─────│                  │               │          │
-    │                  │                  │               │          │
-    │                  │                  │               │          │
-    ├─────────────────────run_parallel──────────────→    │          │
-    │                  │                  │               │          │
-    │                  │             [assess]             │          │
-    │◄─────────────────────────output2,3─────────────────│          │
-    │                  │                  │               │          │
-    │                  │                  │   find_dups→  │          │
-    │◄────────────────────────output4──────────────────│          │
-    │                  │                  │               │          │
-    ├─────────────────────run_parallel──────────────────────────→   │
-    │                  │                  │               │          │
-    │                  │             [enrich]            │          │
-    │◄────────────────────────────output5,6──────────────┤          │
-    │                  │                  │               │          │
-    │                  │─→ Agent 7 (Website Gen)        │          │
-    │◄─────────output7─────────────────────────────────────────────│
-    │                  │                  │               │          │
-    │─save_all_outputs───────────────────────────────────────────→  │
-    │                  │                  │               │          │
-    │─generate_report──────────────────────────────────────────────│
-    │                  │                  │               │          │
+User        WebApp       Orchestrator    Agent1    Agent2,3   Agent4    Agent5
+ │           │               │             │          │         │         │
+ │──upload──→│               │             │          │         │         │
+ │           │               │             │          │         │         │
+ │           │─save_files──→ │             │          │         │         │
+ │           │               │             │          │         │         │
+ │           │─trigger_orch──→             │          │         │         │
+ │           │               │             │          │         │         │
+ │◄──run_id──┤               │             │          │         │         │
+ │           │               │             │          │         │         │
+ │           │           load_images()     │          │         │         │
+ │           │               │             │          │         │         │
+ │           │               │──extract──→ │          │         │         │
+ │           │               │             │          │         │         │
+ │           │               │         [+geocode]     │         │         │
+ │           │               │◄─output1────│          │         │         │
+ │           │               │             │          │         │         │
+ │           │               ├───────run_parallel────→│         │         │
+ │           │               │             │          │         │         │
+ │           │               │         [assess]       │         │         │
+ │           │               │         [+tokens]      │         │         │
+ │           │               │◄────output2,3──────────│         │         │
+ │           │               │             │          │         │         │
+ │           │               │─────filter──────────────────────→│         │
+ │           │               │             │          │         │         │
+ │           │               │         [categorize + reasoning]  │         │
+ │           │               │         [+tokens]                │         │
+ │           │               │◄────output4─────────────────────│         │
+ │           │               │             │          │         │         │
+ │           │               │─────caption────────────────────────────→   │
+ │           │               │             │          │         │         │
+ │           │               │         [generate + context + tokens]      │
+ │           │               │◄────output5─────────────────────┤         │
+ │           │               │             │          │         │         │
+ │           │               │─save_all_outputs────────────────────────→  │
+ │           │               │             │          │         │         │
+ │           │               │─generate_report──────────────────────────→ │
+ │           │               │             │          │         │         │
+ │──poll────→│               │             │          │         │         │
+ │           │               │             │          │         │         │
+ │◄─status───┤               │             │          │         │         │
+ │           │               │             │          │         │         │
+ │─view_rep──→               │             │          │         │         │
+ │           │               │             │          │         │         │
+ │           │─load_outputs──────────────────────────────────────────────→│
+ │           │               │             │          │         │         │
+ │◄──HTML────┤               │             │          │         │         │
+ │  (tabs)   │               │             │          │         │         │
 ```
 
 ---
@@ -140,31 +249,40 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                   Travel Photo Organization System              │
+│                   Travel Photo Organization System               │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐    │
+│  │           WEB UI LAYER (Flask)                          │    │
+│  ├─────────────────────────────────────────────────────────┤    │
+│  │  • Templates (Jinja2): base, index, report              │    │
+│  │  • Static: Clean SaaS CSS, JavaScript                   │    │
+│  │  • Routes: Upload, Report View, Status Polling          │    │
+│  └────────────────┬────────────────────────────────────────┘    │
+│                   │                                              │
+│  ┌────────────────▼────────────────────────────────────────┐    │
 │  │           INPUT LAYER                                   │    │
 │  ├─────────────────────────────────────────────────────────┤    │
-│  │  • Image Files (JPG, PNG, HEIC, RAW)                    │    │
+│  │  • Image Files (JPG, PNG, HEIC, RAW) via upload/        │    │
 │  │  • config.yaml (configuration)                          │    │
-│  │  • .env (API keys)                                      │    │
+│  │  • ADC (Vertex AI credentials)                          │    │
 │  └────────────────┬────────────────────────────────────────┘    │
 │                   │                                              │
 │  ┌────────────────▼────────────────────────────────────────┐    │
 │  │         ORCHESTRATION LAYER                             │    │
 │  ├──────────────────────────────────────────────────────────┤    │
 │  │  TravelPhotoOrchestrator                                │    │
-│  │  • Workflow DAG execution                               │    │
-│  │  • Parallel agent coordination                          │    │
+│  │  • Workflow execution (sequential + parallel)           │    │
+│  │  • Agent coordination                                   │    │
 │  │  • Result aggregation                                   │    │
+│  │  • Token usage tracking                                 │    │
 │  └────┬─────────────┬─────────────┬──────────────────────┘    │
 │       │             │             │                           │
-│  ┌────▼──┐  ┌──────▼────┐  ┌────▼─────┐  ┌──────────────┐   │
-│  │ Agent │  │   Agent   │  │  Agent   │  │    Agent     │   │
-│  │  1-4  │  │   5-6     │  │    7     │  │  (Optional)  │   │
-│  │Layer  │  │  Layer    │  │  Layer   │  │   Custom     │   │
-│  └──┬─────┘  └───┬───────┘  └────┬─────┘  └──────────────┘   │
+│  ┌────▼──┐  ┌──────▼────┐  ┌────▼─────┐                      │
+│  │ Agent │  │   Agent   │  │  Agent   │                      │
+│  │  1    │  │   2-3     │  │   4-5    │                      │
+│  │Meta   │  │ Assess    │  │ Enrich   │                      │
+│  └──┬─────┘  └───┬───────┘  └────┬─────┘                      │
 │     │            │               │                           │
 │  ┌──▼────────────▼───────────────▼──────────────────────┐    │
 │  │        UTILITY LAYER                                 │    │
@@ -173,15 +291,23 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
 │  │  • Validation (schema enforcement)                  │    │
 │  │  • Helpers (file I/O, config loading)               │    │
 │  │  • Error Registry (centralized error tracking)      │    │
+│  │  • Token Tracking (usage aggregation)               │    │
 │  └────────────────┬────────────────────────────────────┘    │
+│                   │                                           │
+│  ┌────────────────▼──────────────────────────────────────┐    │
+│  │         EXTERNAL INTEGRATIONS                         │    │
+│  ├───────────────────────────────────────────────────────┤    │
+│  │  • Vertex AI (Gemini 1.5 Flash)                      │    │
+│  │  • Nominatim (Reverse Geocoding)                     │    │
+│  │  • OpenCV (Image Processing)                         │    │
+│  └────────────────┬──────────────────────────────────────┘    │
 │                   │                                           │
 │  ┌────────────────▼──────────────────────────────────────┐    │
 │  │         OUTPUT LAYER                                  │    │
 │  ├───────────────────────────────────────────────────────┤    │
-│  │  • Reports/ (Agent outputs, validations)             │    │
+│  │  • Reports/ (Agent outputs + token usage)            │    │
 │  │  • Logs/ (workflow.log, errors.json)                 │    │
-│  │  • Website/ (React app with photos.json)             │    │
-│  │  • Metadata/ (EXIF cache)                            │    │
+│  │  • Processed_images/ (uploaded files)                │    │
 │  └───────────────────────────────────────────────────────┘    │
 │                                                                 │
 └──────────────────────────────────────────────────────────────────┘
@@ -196,32 +322,43 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
 │                    EXECUTION ENVIRONMENT                       │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
-│  Python Runtime (3.9+)                                       │
-│  ├─ uv (Package Manager)                                     │
-│  └─ Virtual Environment (.venv/)                             │
+│  Python Runtime (3.9+)                                         │
+│  ├─ uv (Package Manager)                                       │
+│  └─ Virtual Environment (.venv/)                               │
 │                                                                │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │ Main Entry Point: orchestrator.py                    │    │
+│  │ Web Entry Point: web_app/app.py (Flask)             │    │
+│  ├──────────────────────────────────────────────────────┤    │
+│  │ • Port 5001                                          │    │
+│  │ • Drag-and-drop upload interface                     │    │
+│  │ • Triggers orchestrator.py as subprocess             │    │
+│  │ • Serves tabbed reports                              │    │
+│  └──────────────────┬───────────────────────────────────┘    │
+│                     │                                          │
+│  ┌──────────────────▼───────────────────────────────────┐    │
+│  │ CLI Entry Point: orchestrator.py                     │    │
 │  ├──────────────────────────────────────────────────────┤    │
 │  │                                                      │    │
 │  │ ThreadPoolExecutor Pools (per agent):               │    │
-│  │ ├─ Agent 1: 4 workers (I/O)                         │    │
-│  │ ├─ Agent 2: 2 workers (CPU)                         │    │
-│  │ ├─ Agent 3: 2 workers (API)                         │    │
-│  │ ├─ Agent 4: 1 worker  (Quadratic)                   │    │
-│  │ ├─ Agent 5: 2 workers (VLM)                         │    │
-│  │ ├─ Agent 6: 2 workers (LLM)                         │    │
-│  │ └─ Agent 7: 1 worker  (Sequential)                  │    │
+│  │ ├─ Agent 1: 4 workers (I/O + Geocoding)            │    │
+│  │ ├─ Agent 2: 2 workers (CPU - OpenCV)               │    │
+│  │ ├─ Agent 3: 2 workers (API - Vertex AI)            │    │
+│  │ ├─ Agent 4: 2 workers (API - Vertex AI)            │    │
+│  │ └─ Agent 5: 2 workers (API - Vertex AI)            │    │
 │  │                                                      │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                           │                                    │
-│  ┌────────────────────────▼─────────────────────────────┐    │
+│  └──────────────────┬───────────────────────────────────┘    │
+│                     │                                          │
+│  ┌──────────────────▼───────────────────────────────────┐    │
 │  │         External API Integrations                    │    │
 │  ├──────────────────────────────────────────────────────┤    │
-│  │ • OpenAI API (GPT-4 Vision, gpt-4-turbo)            │    │
-│  │ • Google Gemini API (Vision + LLM)                  │    │
-│  │ • Anthropic Claude API (Vision + LLM)               │    │
-│  │ • Reverse Geocoding APIs (optional)                 │    │
+│  │ • Vertex AI (Gemini 1.5 Flash)                      │    │
+│  │   - Project: your-gcp-project                       │    │
+│  │   - Location: us-central1                           │    │
+│  │   - Auth: Application Default Credentials (ADC)     │    │
+│  │                                                      │    │
+│  │ • Nominatim (geopy - Reverse Geocoding)             │    │
+│  │   - User-Agent: travel-photo-workflow               │    │
+│  │   - Timeout: 10 seconds                             │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
@@ -234,15 +371,23 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
 ```
                     ┌─────────────────┐
                     │    IDLE         │
-                    │ (Awaiting input)│
+                    │ (Web UI ready)  │
                     └────────┬────────┘
-                             │ run_workflow()
+                             │ User uploads photos
+                             ▼
+                    ┌─────────────────┐
+                    │  UPLOAD STAGE   │
+                    │ • Save files    │
+                    │ • Create run_id │
+                    └────────┬────────┘
+                             │ Trigger orchestrator
                              ▼
                     ┌─────────────────┐
                     │   INGESTION     │◄──────┐
                     │ (Agent 1 runs)  │       │
+                    │ + Geocoding     │       │
                     └────────┬────────┘       │
-                             │               │
+                             │                │
                       (continues on error)───┘
                              │
                              ▼
@@ -251,6 +396,8 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
          │ (Agents 2 & 3 run concurrently)    │
          │ ┌──────────────┐   ┌──────────────┐│
          │ │ Quality (2)  │   │ Aesthetic(3) ││
+         │ │ OpenCV       │   │ Vertex AI    ││
+         │ │              │   │ +tokens      ││
          │ └──────────────┘   └──────────────┘│
          └────────┬──────────────────┬────────┘
                   │                  │
@@ -259,28 +406,20 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
                   └────────┬─────────┘
                            ▼
                     ┌──────────────────┐
-                    │ DEDUPLICATION    │
+                    │  FILTERING       │
                     │ (Agent 4 runs)   │
+                    │ + Reasoning      │
+                    │ + Tokens         │
                     └────────┬─────────┘
                              │
                       (continues on error)
                              │
                              ▼
-         ┌─────────────────────────────────────┐
-         │  PARALLEL ENRICHMENT                │
-         │ (Agents 5 & 6 run concurrently)    │
-         │ ┌──────────────┐   ┌──────────────┐│
-         │ │ Filter (5)   │   │ Caption (6)  ││
-         │ └──────────────┘   └──────────────┘│
-         └────────┬──────────────────┬────────┘
-                  │                  │
-           (continues on error)
-                  │                  │
-                  └────────┬─────────┘
-                           ▼
                     ┌──────────────────┐
-                    │ PRESENTATION     │
-                    │ (Agent 7 runs)   │
+                    │ CAPTION GEN      │
+                    │ (Agent 5 runs)   │
+                    │ + Full Context   │
+                    │ + Tokens         │
                     └────────┬─────────┘
                              │
                       (continues on error)
@@ -289,13 +428,14 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
                     ┌──────────────────┐
                     │ VALIDATION &     │
                     │ REPORTING        │
-                    │ (Generate reports)
+                    │ + Token totals   │
                     └────────┬─────────┘
                              │
                              ▼
                     ┌──────────────────┐
                     │   COMPLETE       │
                     │ (Output written) │
+                    │ Web UI updated   │
                     └──────────────────┘
 ```
 
@@ -307,151 +447,168 @@ Orchestrator          Agent1            Agent2,3         Agent4    Agent5,6
 Image Entry {
   image_id: str ──────┐
   filename: str ──────├──────→ Metadata {
-  file_size: int ──────┤         gps, camera_settings,
-  format: str ─────────┤         capture_datetime, etc.
-                       └──────→ }
+  file_size: int ──────┤         gps { lat, lon, location (geocoded) }
+  format: str ─────────┤         camera_settings,
+                       └──────→  capture_datetime }
 
   quality_score: int ──┐
   sharpness: int ───────┤───→ Quality Assessment {
-  exposure: int ─────────┤     metrics, issues
-  noise: int ────────────┤     detected_problems
+  exposure: int ─────────┤     noise, resolution,
+  noise: int ────────────┤     metrics, issues
                           └──→ }
 
   overall_aesthetic: int ─┐
   composition: int ────────┼──→ Aesthetic Assessment {
-  framing: int ───────────┤     composition, lighting,
-  lighting: int ──────────┤     subject_interest
-                          └──→ }
+  framing: int ───────────┤     lighting, subject_interest,
+  lighting: int ──────────┤     notes,
+  subject_interest: int ───┤     token_usage {
+  token_usage: {...} ──────┘       prompt_token_count,
+              └──────→              candidates_token_count,
+                                   total_token_count } }
 
   category: str ───────┐
   subcategories: [str]─┼──→ Categorization {
   time_category: str ──┤     location, passes_filter,
-  location: str ───────┤     flags
-  flags: [str]─────────┘
+  location: str ───────┤     reasoning (explains decision),
+  reasoning: str ───────┤     flags,
+  passes_filter: bool ──┤     token_usage {...}
+  flags: [str]─────────┤
+  token_usage: {...} ───┘
             └──────→ }
 
   captions: {
     concise: str ────────┐
     standard: str ───────┼──→ Captions & Keywords {
-    detailed: str ───────┤     keywords: [str]
-  }                       └──→ }
-
-  # From Agent 4
-  group_id: str ──────→ Duplicate Group {
-  selected_best: bool      image_ids, similarity
+    detailed: str ───────┤     keywords: [str],
+  }                      │     token_usage {...}
+  keywords: [str]────────┤
+  token_usage: {...} ────┘
+            └──────→ }
 }
 ```
 
 ---
 
-## Error Handling Flow
+## Token Usage Flow
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Agent Processing with Error Handling           │
+│  Token Usage Tracking (Per VLM Agent)          │
 └──────────────────┬──────────────────────────────┘
                    │
                    ▼
-            ┌──────────────┐
-            │ Try: Process │
-            │   Image      │
-            └──┬────────┬──┘
-               │        │
-         ┌─────▼─┐   ┌──▼────────────────────┐
-         │Success│   │Exception Caught       │
-         │       │   ├───────────────────────┤
-         │       │   │ ├─ API Error          │
-         │       │   │ ├─ Processing Error   │
-         │       │   │ ├─ Validation Error   │
-         │       │   │ └─ File I/O Error     │
-         │       │   │                       │
-         │       │   ├─ Log to ERROR_LOG     │
-         │       │   ├─ Assign severity      │
-         │       │   └─ Return default_result
-         │       │      (with error flag)    │
-         │       │                           │
-         └───┬───┴───────────────────────┬──┘
-             │                           │
-             │ (continue to next image)  │
-             │                           │
-             └───────────────┬───────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ Collect Results      │
-                  │ (successes + failures)
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │ Generate Validation  │
-                  │ Report & Errors Log  │
-                  └──────────────────────┘
+         ┌─────────────────────┐
+         │ Agent calls         │
+         │ Vertex AI API       │
+         └─────────┬───────────┘
+                   │
+                   ▼
+         ┌──────────────────────────┐
+         │ response object received │
+         └─────────┬────────────────┘
+                   │
+                   ▼
+         ┌──────────────────────────────────┐
+         │ Extract usage_metadata           │
+         │ if hasattr(response, 'usage...'): │
+         │   prompt_token_count             │
+         │   candidates_token_count         │
+         │   total_token_count              │
+         └─────────┬────────────────────────┘
+                   │
+                   ▼
+         ┌──────────────────────────────┐
+         │ Add to result dict           │
+         │ result['token_usage'] = {...}│
+         └─────────┬──────────────────────┘
+                   │
+                   ▼
+         ┌──────────────────────────────┐
+         │ Save to JSON output          │
+         │ aesthetic_assessment_output   │
+         │ filtering_categorization...   │
+         │ caption_generation_output     │
+         └─────────┬──────────────────────┘
+                   │
+                   ▼
+         ┌──────────────────────────────┐
+         │ Display in Web UI            │
+         │ • Aesthetic tab              │
+         │ • Filtering tab              │
+         │ • Caption tab                │
+         │ (at bottom of each tab)      │
+         └─────────┬──────────────────────┘
+                   │
+                   ▼
+         ┌──────────────────────────────┐
+         │ Aggregate in final_report    │
+         │ total_tokens_used: NNNNN     │
+         └──────────────────────────────┘
 ```
 
 ---
 
-## Parallel Execution Timeline
+## Web UI Component Structure
 
 ```
-Time
-│
-│ Agent 1 (Metadata)
-├─────────────────────────────────────────────────────
-│                                              Agent 4 (Dedup)
-│  Agent 2 (Quality) ──┐                      ─────────────
-│                       ├─→ Parallel         │
-│  Agent 3 (Aesthetic) ──┘                    Agent 5 (Filter) ──┐
-│                                                                 ├─→ Agent 7
-│                                             Agent 6 (Caption) ──┘
-│
-└─────────────────────────────────────────────────────→
-
-Wait points (must complete before next stage):
-  ✓ Agent 1 → before Agents 2, 3
-  ✓ Agents 2 & 3 → before Agent 4
-  ✓ Agent 4 → before Agents 5 & 6
-  ✓ Agents 5 & 6 → before Agent 7
-```
-
----
-
-## Configuration Loading Flow
-
-```
-┌───────────────────────────────┐
-│   Application Startup         │
-└──────────────┬────────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Load config.yaml      │
-    └──────────┬────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Validate config       │
-    │ against schema        │
-    └──────────┬────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Load .env variables   │
-    └──────────┬────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Create directories    │
-    └──────────┬────────────┘
-               │
-    ┌──────────▼────────────────────────────────┐
-    │ Initialize Agents                         │
-    │ Each agent extracts:                      │
-    │ config['agents']['agent_key']             │
-    └──────────┬───────────────────────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Setup Logger          │
-    └──────────┬────────────┘
-               │
-    ┌──────────▼────────────┐
-    │ Ready for execution   │
-    └───────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    base.html                             │
+│  (Clean SaaS Design System)                             │
+├──────────────────────────────────────────────────────────┤
+│  • Inter font family                                     │
+│  • CSS variables (--primary, --text, --border)          │
+│  • Responsive layout                                     │
+│  • Modern color palette                                  │
+└────────────────┬─────────────────┬─────────────────────┘
+                 │                 │
+     ┌───────────┴──────┐  ┌──────┴──────────┐
+     │                  │  │                 │
+     ▼                  ▼  ▼                 ▼
+┌──────────┐    ┌──────────────────────────────────┐
+│index.html│    │        report.html               │
+├──────────┤    ├──────────────────────────────────┤
+│Dashboard │    │ Stats Overview                   │
+│          │    │ ├─ Total images                  │
+│• Upload  │    │ ├─ Passed/Rejected               │
+│  Zone    │    │ └─ Average scores                │
+│          │    │                                  │
+│• Run     │    │ Image Grid (responsive)          │
+│  History │    │ ├─ Thumbnails                    │
+│  List    │    │ └─ Per-image cards               │
+│          │    │                                  │
+│• Status  │    │ Tabbed Interface (per image)     │
+│  Badges  │    │ ├─ Metadata Tab                  │
+│          │    │ │  ├─ Date, camera               │
+│          │    │ │  ├─ GPS location (geocoded)    │
+│          │    │ │  └─ Dimensions                 │
+│          │    │ │                                │
+│• JS Poll │    │ ├─ Quality Tab                   │
+│  Status  │    │ │  ├─ Overall score              │
+│          │    │ │  ├─ Sharpness, noise, exposure │
+│          │    │ │  └─ Issues                     │
+│          │    │ │                                │
+└──────────┘    │ ├─ Aesthetic Tab                 │
+                │ │  ├─ Overall, composition       │
+                │ │  ├─ Lighting, framing, subject │
+                │ │  ├─ AI analysis notes          │
+                │ │  └─ Token usage                │
+                │ │                                │
+                │ ├─ Filtering Tab                 │
+                │ │  ├─ Status (pass/reject)       │
+                │ │  ├─ Category                   │
+                │ │  ├─ Reasoning (explains why)   │
+                │ │  └─ Token usage                │
+                │ │                                │
+                │ └─ Caption Tab                   │
+                │    ├─ Concise caption            │
+                │    ├─ Standard caption           │
+                │    ├─ Keywords                   │
+                │    └─ Token usage                │
+                │                                  │
+                │ JavaScript                       │
+                │ ├─ Tab switching                 │
+                │ └─ Image card interactions       │
+                └──────────────────────────────────┘
 ```
 
 ---
