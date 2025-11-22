@@ -20,7 +20,7 @@ open-clip-torch>=2.23.0
 
 # API clients for VLM services
 openai>=1.6.0
-google-generativeai>=0.3.0
+google-genai>=0.1.0
 
 # Data handling
 pandas>=2.1.0

@@ -25,7 +25,6 @@ agents:
   aesthetic_assessment:
     enabled: true
     batch_size: 5
-    model: "gpt4v"  # Options: gpt4v, gemini, nima
     parallel_workers: 2
 
   filtering_categorization:
@@ -33,12 +32,10 @@ agents:
     min_technical_score: 3
     min_aesthetic_score: 3
     batch_size: 10
-    model: "gemini"
 
   caption_generation:
     enabled: true
     batch_size: 5
-    model: "gemini"  # Options: gpt4, gemini
     include_keywords: true
 
 # API Configuration (use environment variables for keys)
@@ -49,7 +46,9 @@ api:
     temperature: 0.7
 
   google:
-    model: "gemini-2.5-flash-lite"  # Latest free tier model (faster and more capable)
+    model: "gemini-2.0-flash-lite"
+    project: "gcloud-photo-project"  # Replace with your GCP project ID
+    location: "us-central1"
     max_tokens: 2048
     temperature: 0.7
 
