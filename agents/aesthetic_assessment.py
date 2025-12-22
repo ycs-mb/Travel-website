@@ -17,6 +17,7 @@ from google.genai import types
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
 from utils.heic_reader import is_heic_file, open_heic_with_pil
+from utils.token_tracker import TokenTracker, resize_image_for_api, get_optimized_media_type
 
 
 class AestheticAssessmentAgent:
@@ -31,7 +32,14 @@ class AestheticAssessmentAgent:
     Scoring: 5=Museum quality, 4=Professional, 3=Good amateur, 2=Acceptable, 1=Poor.
     """
 
-    SYSTEM_PROMPT = """
+    # Concise system prompt (optimized for token reduction)
+    SYSTEM_PROMPT_CONCISE = """Evaluate travel photo aesthetic quality.
+Rate (1-5): composition, framing, lighting, subject_interest.
+5=Exceptional, 4=Professional, 3=Good, 2=Acceptable, 1=Poor.
+Respond with ONLY valid JSON."""
+
+    # Full system prompt (for reference/fallback)
+    SYSTEM_PROMPT_FULL = """
     You are a world-renowned photo curator and aesthetic expert with decades of
     experience in fine art and travel photography.
 
@@ -85,85 +93,69 @@ class AestheticAssessmentAgent:
             log_warning(self.logger, f"Failed to initialize Vertex AI client: {e}", "Aesthetic Assessment")
             self.client = None
 
-    def _call_vlm_api(self, image_path: Path, prompt: str) -> Dict[str, Any]:
+        # Token tracking setup
+        pricing_config = self.api_config.get('pricing', {})
+        pricing = {
+            'input_per_1k': pricing_config.get('input_per_1k_tokens', 0.000075),
+            'output_per_1k': pricing_config.get('output_per_1k_tokens', 0.0003)
+        }
+        self.token_tracker = TokenTracker(pricing=pricing)
+
+        # Optimization settings
+        self.optimization = self.api_config.get('optimization', {})
+        self.enable_resizing = self.optimization.get('enable_image_resizing', True)
+        self.max_dimension = self.optimization.get('max_image_dimension', 1024)
+        self.jpeg_quality = self.optimization.get('jpeg_quality', 85)
+        self.use_concise_prompts = self.optimization.get('use_concise_prompts', True)
+
+        # Select prompt based on optimization setting
+        self.SYSTEM_PROMPT = self.SYSTEM_PROMPT_CONCISE if self.use_concise_prompts else self.SYSTEM_PROMPT_FULL
+
+    def _call_vlm_api(self, image_path: Path, prompt: str, image_id: str = None) -> Dict[str, Any]:
         """
         Call Gemini Vision API for aesthetic assessment.
 
         Args:
             image_path: Path to image
             prompt: Assessment prompt
+            image_id: Image identifier for token tracking
 
         Returns:
             Assessment scores and notes
         """
         try:
-            # Handle HEIC files - read directly without conversion
-            if is_heic_file(image_path):
+            # Use optimized image resizing if enabled
+            if self.enable_resizing:
                 try:
-                    # Read HEIC directly with PIL
-                    img = open_heic_with_pil(image_path)
-
-                    # Convert to RGB if needed
-                    if img.mode != 'RGB':
-                        if img.mode in ('RGBA', 'LA', 'P'):
-                            background = Image.new('RGB', img.size, (255, 255, 255))
-                            if img.mode == 'P':
-                                img = img.convert('RGBA')
-                            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-                            img = background
-                        else:
-                            img = img.convert('RGB')
-
-                    # Encode as JPEG in memory
-                    import io
-                    img_buffer = io.BytesIO()
-                    img.save(img_buffer, format='JPEG', quality=95)
-                    image_data = base64.standard_b64encode(img_buffer.getvalue()).decode('utf-8')
-                    media_type = 'image/jpeg'
-
-                    log_info(self.logger, f"Opened HEIC directly for API: {image_path.name}", "Aesthetic Assessment")
-                except Exception as e:
-                    log_error(
-                        self.logger,
-                        "Aesthetic Assessment",
-                        "HEICReadError",
-                        f"Failed to read HEIC file {image_path.name}: {e}",
-                        "warning"
+                    image_bytes = resize_image_for_api(
+                        image_path,
+                        max_dimension=self.max_dimension,
+                        quality=self.jpeg_quality
                     )
-                    return {
-                        "composition": 3,
-                        "framing": 3,
-                        "lighting": 3,
-                        "subject_interest": 3,
-                        "overall_aesthetic": 3,
-                        "notes": f"HEIC read error: {str(e)}"
-                    }
+                    media_type = get_optimized_media_type(image_path)
+                    log_info(self.logger, f"Resized image for API (max_dim={self.max_dimension}): {image_path.name}", "Aesthetic Assessment")
+                except Exception as e:
+                    log_warning(self.logger, f"Failed to resize image, using original: {e}", "Aesthetic Assessment")
+                    # Fallback to original
+                    with open(image_path, 'rb') as f:
+                        image_bytes = f.read()
+                    media_type = get_optimized_media_type(image_path)
             else:
-                # Read and encode image
+                # Read original image
                 with open(image_path, 'rb') as f:
-                    image_data = base64.standard_b64encode(f.read()).decode('utf-8')
-
-                # Determine media type
-                suffix = image_path.suffix.lower()
-                media_type_map = {
-                    '.jpg': 'image/jpeg',
-                    '.jpeg': 'image/jpeg',
-                    '.png': 'image/png',
-                    '.gif': 'image/gif',
-                    '.webp': 'image/webp'
-                }
-                media_type = media_type_map.get(suffix, 'image/jpeg')
+                    image_bytes = f.read()
+                media_type = get_optimized_media_type(image_path)
 
             # Call Gemini Vision API via Vertex AI
             if not self.client:
                 raise Exception("Vertex AI client not initialized")
-            
+
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=[
                     types.Part.from_text(text=prompt),
                     types.Part.from_bytes(
-                        data=base64.standard_b64decode(image_data),
+                        data=image_bytes,
                         mime_type=media_type
                     )
                 ]
@@ -175,15 +167,22 @@ class AestheticAssessmentAgent:
 
             # Extract JSON from response
             assessment = self._parse_vlm_response(response_text)
-            
-            # Add token usage metadata
+
+            # Track token usage and calculate cost
             if hasattr(response, 'usage_metadata'):
-                assessment['token_usage'] = {
-                    'prompt_token_count': response.usage_metadata.prompt_token_count,
-                    'candidates_token_count': response.usage_metadata.candidates_token_count,
-                    'total_token_count': response.usage_metadata.total_token_count
-                }
-            
+                usage_record = self.token_tracker.track_usage(response.usage_metadata, image_id)
+                assessment['token_usage'] = usage_record
+
+                # Log per-image cost if enabled
+                cost_config = self.config.get('cost_tracking', {})
+                if cost_config.get('log_per_image', True):
+                    log_info(
+                        self.logger,
+                        f"Token cost for {image_path.name}: ${usage_record['estimated_cost_usd']:.4f} "
+                        f"({usage_record['total_token_count']} tokens)",
+                        "Aesthetic Assessment"
+                    )
+
             return assessment
 
         except Exception as e:
@@ -295,11 +294,26 @@ class AestheticAssessmentAgent:
             Aesthetic assessment dictionary
         """
         try:
-            # Construct detailed prompt for VLM
-            gps = metadata.get('gps', {})
-            location = f"{gps.get('latitude', 'unknown')}, {gps.get('longitude', 'unknown')}"
+            image_id = metadata.get('image_id', image_path.stem)
 
-            prompt = f"""{self.SYSTEM_PROMPT}
+            # Construct prompt (concise if optimization enabled, detailed otherwise)
+            if self.use_concise_prompts:
+                # Optimized concise prompt (reduces input tokens by ~80%)
+                prompt = f"""{self.SYSTEM_PROMPT}
+
+{{
+    "composition": <1-5>,
+    "framing": <1-5>,
+    "lighting": <1-5>,
+    "subject_interest": <1-5>,
+    "notes": "<brief analysis>"
+}}"""
+            else:
+                # Full detailed prompt
+                gps = metadata.get('gps', {})
+                location = f"{gps.get('latitude', 'unknown')}, {gps.get('longitude', 'unknown')}"
+
+                prompt = f"""{self.SYSTEM_PROMPT}
 
 TASK: Analyze this travel photograph and provide aesthetic assessment scores.
 
@@ -328,8 +342,8 @@ RESPONSE FORMAT: Provide your response as a JSON object with this exact structur
 
 Be specific and reference the actual visual elements you observe in the photograph."""
 
-            # Call VLM API
-            assessment = self._call_vlm_api(image_path, prompt)
+            # Call VLM API with token tracking
+            assessment = self._call_vlm_api(image_path, prompt, image_id)
 
             # Add image_id
             assessment['image_id'] = metadata['image_id']
@@ -416,9 +430,42 @@ Be specific and reference the actual visual elements you observe in the photogra
         # Calculate statistics
         if assessment_list:
             avg_aesthetic = sum(a['overall_aesthetic'] for a in assessment_list) / len(assessment_list)
+
+            # Get token usage summary
+            usage_summary = self.token_tracker.get_summary()
+
             summary = f"Assessed {len(assessment_list)} images, average aesthetic: {avg_aesthetic:.2f}/5"
+            log_info(
+                self.logger,
+                f"Aesthetic assessment completed: {summary}",
+                "Aesthetic Assessment"
+            )
+            log_info(
+                self.logger,
+                f"Total tokens used: {usage_summary['total_tokens']['total_tokens']:,} "
+                f"(input: {usage_summary['total_tokens']['prompt_tokens']:,}, "
+                f"output: {usage_summary['total_tokens']['completion_tokens']:,})",
+                "Aesthetic Assessment"
+            )
+            log_info(
+                self.logger,
+                f"Estimated cost: ${usage_summary['estimated_cost_usd']:.4f} "
+                f"(avg: ${usage_summary['estimated_cost_usd']/len(assessment_list):.4f} per image)",
+                "Aesthetic Assessment"
+            )
+
+            # Check if cost exceeds threshold
+            cost_config = self.config.get('cost_tracking', {})
+            threshold = cost_config.get('alert_threshold_usd', 1.0)
+            if usage_summary['estimated_cost_usd'] > threshold:
+                log_warning(
+                    self.logger,
+                    f"Cost ${usage_summary['estimated_cost_usd']:.4f} exceeds threshold ${threshold:.2f}",
+                    "Aesthetic Assessment"
+                )
         else:
             summary = "No images were successfully assessed"
+            usage_summary = None
 
         # Create validation summary
         status = "success" if not issues else ("warning" if len(issues) < len(image_paths) else "error")
@@ -431,6 +478,8 @@ Be specific and reference the actual visual elements you observe in the photogra
             issues=issues if issues else None
         )
 
-        log_info(self.logger, f"Aesthetic assessment completed: {summary}", "Aesthetic Assessment")
+        # Add token usage to validation
+        if usage_summary:
+            validation['token_usage'] = usage_summary
 
         return assessment_list, validation

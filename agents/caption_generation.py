@@ -14,6 +14,7 @@ from google.genai import types
 from utils.logger import log_error, log_info, log_warning
 from utils.validation import validate_agent_output, create_validation_summary
 from utils.heic_reader import is_heic_file, open_heic_with_pil
+from utils.token_tracker import TokenTracker, resize_image_for_api, get_optimized_media_type
 
 
 class CaptionGenerationAgent:
@@ -32,7 +33,13 @@ class CaptionGenerationAgent:
     Incorporate location, time, technical details, and cultural context.
     """
 
-    SYSTEM_PROMPT = """
+    # Concise system prompt (optimized for token reduction)
+    SYSTEM_PROMPT_CONCISE = """Generate travel photo captions.
+Return 3 levels: concise (<100 chars), standard (150-250 chars), detailed (300-500 chars).
+Add keywords. Respond with ONLY valid JSON."""
+
+    # Full system prompt
+    SYSTEM_PROMPT_FULL = """
     You are an award-winning travel writer and photo journalist. Generate engaging,
     informative captions that bring images to life.
 
@@ -96,13 +103,32 @@ class CaptionGenerationAgent:
             log_warning(self.logger, f"Failed to initialize Vertex AI client: {e}", "Caption Generation")
             self.client = None
 
+        # Token tracking setup
+        pricing_config = self.api_config.get('pricing', {})
+        pricing = {
+            'input_per_1k': pricing_config.get('input_per_1k_tokens', 0.000075),
+            'output_per_1k': pricing_config.get('output_per_1k_tokens', 0.0003)
+        }
+        self.token_tracker = TokenTracker(pricing=pricing)
+
+        # Optimization settings
+        self.optimization = self.api_config.get('optimization', {})
+        self.enable_resizing = self.optimization.get('enable_image_resizing', True)
+        self.max_dimension = self.optimization.get('max_image_dimension', 1024)
+        self.jpeg_quality = self.optimization.get('jpeg_quality', 85)
+        self.use_concise_prompts = self.optimization.get('use_concise_prompts', True)
+
+        # Select prompt based on optimization setting
+        self.SYSTEM_PROMPT = self.SYSTEM_PROMPT_CONCISE if self.use_concise_prompts else self.SYSTEM_PROMPT_FULL
+
     def _call_llm_api(
         self,
         image_path: Path,
         metadata: Dict[str, Any],
         quality: Dict[str, Any],
         aesthetic: Dict[str, Any],
-        category: Dict[str, Any]
+        category: Dict[str, Any],
+        image_id: str = None
     ) -> Dict[str, Any]:
         """
         Call Gemini API for caption generation.
@@ -113,66 +139,30 @@ class CaptionGenerationAgent:
             quality: Quality assessment
             aesthetic: Aesthetic assessment
             category: Categorization
+            image_id: Image identifier for token tracking
 
         Returns:
             Captions dictionary
         """
         try:
-            # Handle HEIC files - read directly without conversion
-            if is_heic_file(image_path):
+            # Use optimized image resizing if enabled
+            if self.enable_resizing:
                 try:
-                    # Read HEIC directly with PIL
-                    from PIL import Image as PILImage
-                    import io
-                    img = open_heic_with_pil(image_path)
-
-                    # Convert to RGB if needed
-                    if img.mode != 'RGB':
-                        if img.mode in ('RGBA', 'LA', 'P'):
-                            background = PILImage.new('RGB', img.size, (255, 255, 255))
-                            if img.mode == 'P':
-                                img = img.convert('RGBA')
-                            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-                            img = background
-                        else:
-                            img = img.convert('RGB')
-
-                    # Encode as JPEG in memory
-                    img_buffer = io.BytesIO()
-                    img.save(img_buffer, format='JPEG', quality=95)
-                    image_data = base64.standard_b64encode(img_buffer.getvalue()).decode('utf-8')
-                    media_type = 'image/jpeg'
-
-                    log_info(self.logger, f"Opened HEIC directly for API: {image_path.name}", "Caption Generation")
-                except Exception as e:
-                    log_error(
-                        self.logger,
-                        "Caption Generation",
-                        "HEICReadError",
-                        f"Failed to read HEIC file {image_path.name}: {e}",
-                        "warning"
+                    image_bytes = resize_image_for_api(
+                        image_path,
+                        max_dimension=self.max_dimension,
+                        quality=self.jpeg_quality
                     )
-                    return {
-                        "concise": f"Image processing error",
-                        "standard": f"Failed to process image",
-                        "detailed": f"Error reading image file: {str(e)}",
-                        "keywords": ["error"]
-                    }
+                    media_type = get_optimized_media_type(image_path)
+                except Exception as e:
+                    log_warning(self.logger, f"Failed to resize image, using original: {e}", "Caption Generation")
+                    with open(image_path, 'rb') as f:
+                        image_bytes = f.read()
+                    media_type = get_optimized_media_type(image_path)
             else:
-                # Read and encode image
                 with open(image_path, 'rb') as f:
-                    image_data = base64.standard_b64encode(f.read()).decode('utf-8')
-
-                # Determine media type
-                suffix = image_path.suffix.lower()
-                media_type_map = {
-                    '.jpg': 'image/jpeg',
-                    '.jpeg': 'image/jpeg',
-                    '.png': 'image/png',
-                    '.gif': 'image/gif',
-                    '.webp': 'image/webp'
-                }
-                media_type = media_type_map.get(suffix, 'image/jpeg')
+                    image_bytes = f.read()
+                media_type = get_optimized_media_type(image_path)
 
             # Build context for captions
             location = category.get('location', 'the location')
@@ -180,8 +170,22 @@ class CaptionGenerationAgent:
             main_cat = category.get('category', 'a scene')
             subcats = ', '.join(category.get('subcategories', ['visual elements']))
 
-            # Create prompt for caption generation
-            prompt = f"""{self.SYSTEM_PROMPT}
+            # Create prompt for caption generation (concise or detailed)
+            if self.use_concise_prompts:
+                # Optimized concise prompt
+                prompt = f"""{self.SYSTEM_PROMPT}
+
+Category: {main_cat}, Time: {time_cat}.
+
+{{
+    "concise": "<max 100 chars>",
+    "standard": "<150-250 chars>",
+    "detailed": "<300-500 chars>",
+    "keywords": ["<kw1>", "<kw2>"]
+}}"""
+            else:
+                # Full detailed prompt
+                prompt = f"""{self.SYSTEM_PROMPT}
 
 CONTEXT:
 - Image category: {main_cat}
@@ -207,13 +211,13 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
             # Call Gemini API with image via Vertex AI
             if not self.client:
                 raise Exception("Vertex AI client not initialized")
-            
+
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=[
                     types.Part.from_text(text=prompt),
                     types.Part.from_bytes(
-                        data=base64.standard_b64decode(image_data),
+                        data=image_bytes,
                         mime_type=media_type
                     )
                 ]
@@ -225,15 +229,22 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
 
             # Extract captions
             captions = self._parse_caption_response(response_text)
-            
-            # Add token usage metadata
+
+            # Track token usage and calculate cost
             if hasattr(response, 'usage_metadata'):
-                captions['token_usage'] = {
-                    'prompt_token_count': response.usage_metadata.prompt_token_count,
-                    'candidates_token_count': response.usage_metadata.candidates_token_count,
-                    'total_token_count': response.usage_metadata.total_token_count
-                }
-            
+                usage_record = self.token_tracker.track_usage(response.usage_metadata, image_id)
+                captions['token_usage'] = usage_record
+
+                # Log per-image cost if enabled
+                cost_config = self.config.get('cost_tracking', {})
+                if cost_config.get('log_per_image', True):
+                    log_info(
+                        self.logger,
+                        f"Token cost for {image_path.name}: ${usage_record['estimated_cost_usd']:.4f} "
+                        f"({usage_record['total_token_count']} tokens)",
+                        "Caption Generation"
+                    )
+
             return captions
 
         except Exception as e:
@@ -370,21 +381,24 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
             Caption data
         """
         try:
+            image_id = metadata.get('image_id', image_path.stem)
+
             # Generate captions
             caption_data = self._call_llm_api(
                 image_path,
                 metadata,
                 quality,
                 aesthetic,
-                category
+                category,
+                image_id
             )
 
             result = {
-                'image_id': metadata['image_id'],
+                'image_id': image_id,
                 'captions': caption_data['captions'],
                 'keywords': caption_data['keywords']
             }
-            
+
             if 'token_usage' in caption_data:
                 result['token_usage'] = caption_data['token_usage']
 
@@ -480,6 +494,33 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
 
         summary = f"Generated captions for {len(captions_list)} images"
 
+        # Get token usage summary
+        usage_summary = self.token_tracker.get_summary()
+        if usage_summary['images_processed'] > 0:
+            log_info(
+                self.logger,
+                f"Total tokens used: {usage_summary['total_tokens']['total_tokens']:,} "
+                f"(input: {usage_summary['total_tokens']['prompt_tokens']:,}, "
+                f"output: {usage_summary['total_tokens']['completion_tokens']:,})",
+                "Caption Generation"
+            )
+            log_info(
+                self.logger,
+                f"Estimated cost: ${usage_summary['estimated_cost_usd']:.4f} "
+                f"(avg: ${usage_summary['estimated_cost_usd']/usage_summary['images_processed']:.4f} per image)",
+                "Caption Generation"
+            )
+
+            # Check if cost exceeds threshold
+            cost_config = self.config.get('cost_tracking', {})
+            threshold = cost_config.get('alert_threshold_usd', 1.0)
+            if usage_summary['estimated_cost_usd'] > threshold:
+                log_warning(
+                    self.logger,
+                    f"Cost ${usage_summary['estimated_cost_usd']:.4f} exceeds threshold ${threshold:.2f}",
+                    "Caption Generation"
+                )
+
         status = "success" if not issues else ("warning" if len(issues) < len(image_paths) else "error")
 
         validation = create_validation_summary(
@@ -489,6 +530,10 @@ Make captions specific, avoid clichés, and incorporate the actual visual elemen
             summary=summary,
             issues=issues if issues else None
         )
+
+        # Add token usage to validation
+        if usage_summary['images_processed'] > 0:
+            validation['token_usage'] = usage_summary
 
         log_info(self.logger, f"Caption generation completed: {summary}", "Caption Generation")
 

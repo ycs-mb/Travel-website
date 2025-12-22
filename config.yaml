@@ -37,6 +37,15 @@ agents:
     enabled: true
     batch_size: 5
     include_keywords: true
+    skip_rejected: true  # Skip caption generation for rejected images
+
+# Cost Tracking
+cost_tracking:
+  enabled: true
+  log_per_image: true           # Log token cost for each image
+  display_in_reports: true      # Show costs in JSON reports
+  display_in_ui: true           # Show costs in web UI
+  alert_threshold_usd: 1.0      # Warn if batch exceeds this cost
 
 # API Configuration (use environment variables for keys)
 api:
@@ -51,6 +60,18 @@ api:
     location: "us-central1"
     max_tokens: 2048
     temperature: 0.7
+
+    # Token optimization settings
+    pricing:
+      input_per_1k_tokens: 0.000075   # $0.075 per 1M input tokens
+      output_per_1k_tokens: 0.0003    # $0.30 per 1M output tokens
+
+    optimization:
+      enable_image_resizing: true      # Resize images to reduce token usage
+      max_image_dimension: 1024        # Max width/height in pixels
+      jpeg_quality: 85                 # Quality for resized images (1-100)
+      use_concise_prompts: true        # Use shorter, optimized prompts
+      skip_captions_for_rejected: true # Don't caption rejected images
 
 # Quality Thresholds
 thresholds:
