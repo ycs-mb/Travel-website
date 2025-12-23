@@ -32,6 +32,8 @@ env/
 # Environment variables
 .env
 .env.local
+keys.json
+.env.bak
 
 # IDE
 .vscode/
