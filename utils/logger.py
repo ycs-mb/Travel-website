@@ -40,7 +40,8 @@ def setup_logger(
     name: str = "travel_photo_workflow",
     log_level: str = "INFO",
     log_file: Optional[Path] = None,
-    json_format: bool = True
+    json_format: bool = True,
+    mcp_mode: bool = False
 ) -> logging.Logger:
     """
     Set up structured logger.
@@ -50,23 +51,33 @@ def setup_logger(
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Path to log file (optional)
         json_format: Use JSON formatting
+        mcp_mode: If True, disable all stdout/stderr logging and force file logging
 
     Returns:
         Configured logger instance
     """
     logger = logging.getLogger(name)
-    logger.setLevel(getattr(logging, log_level.upper()))
+
+    # Ensure log_level is a string and handle potential dictionary from config
+    if isinstance(log_level, dict):
+        log_level = log_level.get('level', 'INFO')
+    
+    level = getattr(logging, str(log_level).upper(), logging.INFO)
+    logger.setLevel(level)
     logger.handlers.clear()
 
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    if json_format:
-        console_handler.setFormatter(StructuredFormatter())
-    else:
-        console_handler.setFormatter(
-            logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        )
-    logger.addHandler(console_handler)
+    # In MCP mode, we ABSOLUTELY MUST NOT log to stdout as it corrupts the protocol.
+    # We will only use file logging.
+    if not mcp_mode:
+        # Console handler (stdout)
+        console_handler = logging.StreamHandler(sys.stdout)
+        if json_format:
+            console_handler.setFormatter(StructuredFormatter())
+        else:
+            console_handler.setFormatter(
+                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            )
+        logger.addHandler(console_handler)
 
     # File handler
     if log_file:

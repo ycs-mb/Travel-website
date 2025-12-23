@@ -3,11 +3,18 @@
 
 set -e  # Exit on error
 
+# Get the absolute path to the project directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Change to project directory
+cd "$PROJECT_DIR"
+
 echo "🚀 Setting up MCP Photo Analysis Server..."
 
 # Check if we're in the right directory
 if [ ! -f "config.yaml" ]; then
-    echo "❌ Error: Please run this script from the Travel-website directory"
+    echo "❌ Error: config.yaml not found in $PROJECT_DIR"
     exit 1
 fi
 
@@ -16,8 +23,6 @@ echo "📦 Installing MCP dependencies..."
 uv add mcp
 
 # 2. Get the absolute path to the MCP server
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 MCP_SERVER_PATH="$PROJECT_DIR/mcp/photo_analysis_server.py"
 
 echo "📍 MCP server path: $MCP_SERVER_PATH"
@@ -40,16 +45,33 @@ echo "📁 Claude Desktop config: $CLAUDE_CONFIG"
 mkdir -p "$(dirname "$CLAUDE_CONFIG")"
 
 # 5. Create or update Claude Desktop config
+# Get absolute path for uv
+UV_PATH=$(which uv)
+if [ -z "$UV_PATH" ]; then
+    # Fallback to common locations if not in PATH
+    if [ -f "$HOME/.local/bin/uv" ]; then
+        UV_PATH="$HOME/.local/bin/uv"
+    elif [ -f "/usr/local/bin/uv" ]; then
+        UV_PATH="/usr/local/bin/uv"
+    elif [ -f "/opt/homebrew/bin/uv" ]; then
+        UV_PATH="/opt/homebrew/bin/uv"
+    else
+        UV_PATH="uv" # Last resort
+    fi
+fi
+
 if [ -f "$CLAUDE_CONFIG" ]; then
     echo "📝 Claude Desktop config exists"
     echo "   Please manually add the following to mcpServers section:"
     echo ""
     echo '  "photo-analysis": {'
-    echo '    "command": "uv",'
+    echo "    \"command\": \"$UV_PATH\","
     echo '    "args": ['
     echo '      "run",'
+    echo '      "--directory",'
+    echo "      \"$PROJECT_DIR\","
     echo '      "python",'
-    echo "      \"$MCP_SERVER_PATH\""
+    echo '      "mcp/photo_analysis_server.py"'
     echo '    ]'
     echo '  }'
     echo ""
@@ -59,11 +81,13 @@ else
 {
   "mcpServers": {
     "photo-analysis": {
-      "command": "uv",
+      "command": "$UV_PATH",
       "args": [
         "run",
+        "--directory",
+        "$PROJECT_DIR",
         "python",
-        "$MCP_SERVER_PATH"
+        "mcp/photo_analysis_server.py"
       ]
     }
   }
@@ -87,22 +111,6 @@ except ImportError as e:
     sys.exit(1)
 "
 
-# 7. Create test script
-cat > test_mcp.sh << 'EOF'
-#!/bin/bash
-# Test MCP server directly
-
-echo "🧪 Testing MCP server..."
-echo ""
-echo "Starting MCP server (Ctrl+C to stop)..."
-echo "The server should start without errors."
-echo ""
-
-uv run python mcp/photo_analysis_server.py
-EOF
-
-chmod +x test_mcp.sh
-
 echo ""
 echo "✅ MCP setup complete!"
 echo ""
@@ -115,7 +123,7 @@ else
 fi
 echo "2. Restart Claude Desktop"
 echo "3. Look for 'photo-analysis' in the MCP servers list (🔌 icon)"
-echo "4. Test with: ./test_mcp.sh"
+echo "4. Test with: ./scripts/test_mcp.sh"
 echo ""
 echo "💬 Usage in Claude Desktop:"
 echo '   "Analyze this photo: /path/to/image.jpg"'

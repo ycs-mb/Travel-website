@@ -26,6 +26,8 @@ Usage in Claude:
 import asyncio
 import json
 import logging
+import os
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import yaml
@@ -54,8 +56,20 @@ config_path = Path(__file__).parent.parent / "config.yaml"
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
-# Setup logger
-logger = setup_logger("MCP", config)
+# Setup logger - CRITICAL: Disable console output for MCP server
+# MCP protocol uses stdout for communication, so we can only log to file
+log_level = config.get('logging', {}).get('level', 'INFO')
+log_dir = Path(__file__).parent.parent / 'output' / 'logs'
+log_file = log_dir / 'mcp_server.log'
+
+# Use robust setup_logger with mcp_mode=True to ensure NO stdout logging
+logger = setup_logger(
+    name="MCP",
+    log_level=log_level,
+    log_file=log_file,
+    json_format=config.get('logging', {}).get('format', 'json') == 'json',
+    mcp_mode=True
+)
 
 # Initialize agents
 agents = {
@@ -108,6 +122,20 @@ async def list_tools() -> List[Tool]:
         Tool(
             name="assess_aesthetic_quality",
             description="Evaluate aesthetic quality of a photo. Returns scores for composition, framing, lighting, and subject interest (1-5 scale).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image_path": {
+                        "type": "string",
+                        "description": "Absolute path to the image file"
+                    }
+                },
+                "required": ["image_path"]
+            }
+        ),
+        Tool(
+            name="extract_metadata",
+            description="Extract EXIF, GPS, and technical metadata from a photo. Returns raw metadata fields.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -189,6 +217,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "generate_caption":
             return await handle_caption_generation(arguments)
 
+        elif name == "extract_metadata":
+            return await handle_extract_metadata(arguments)
+
         elif name == "get_token_usage":
             return await handle_token_usage(arguments)
 
@@ -200,9 +231,41 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 
+def normalize_path(path_str: str) -> Path:
+    """
+    Normalize a path string from various formats (URI, relative, etc.)
+    
+    Args:
+        path_str: String representation of the path
+        
+    Returns:
+        pathlib.Path: Normalized absolute path
+    """
+    if not path_str:
+        return Path(".")
+        
+    # Handle URI format (file://...)
+    if path_str.startswith("file://"):
+        path_str = path_str[7:]
+        # On windows, file:///C:/path becomes /C:/path, so we strip leading slash if needed
+        if os.name == 'nt' and path_str.startswith("/"):
+            path_str = path_str[1:]
+            
+    # Unquote URL-encoded characters (e.g., %20 -> space)
+    path_str = urllib.parse.unquote(path_str)
+    
+    # Expand user directory (~)
+    path_str = os.path.expanduser(path_str)
+    
+    # Resolve to absolute path
+    path = Path(path_str).resolve()
+    
+    return path
+
+
 async def handle_analyze_photo(args: Dict[str, Any]) -> List[TextContent]:
     """Run full photo analysis pipeline"""
-    image_path = Path(args["image_path"])
+    image_path = normalize_path(args["image_path"])
 
     if not image_path.exists():
         return [TextContent(type="text", text=f"Error: Image not found at {image_path}")]
@@ -218,7 +281,7 @@ async def handle_analyze_photo(args: Dict[str, Any]) -> List[TextContent]:
     result['metadata'] = metadata
 
     # Run quality assessment
-    quality_list, _ = agents['quality'].run([image_path])
+    quality_list, _ = agents['quality'].run([image_path], [metadata])
     quality = quality_list[0] if quality_list else {}
     result['quality'] = quality
 
@@ -274,7 +337,7 @@ async def handle_analyze_photo(args: Dict[str, Any]) -> List[TextContent]:
 
 async def handle_aesthetic_assessment(args: Dict[str, Any]) -> List[TextContent]:
     """Run aesthetic assessment only"""
-    image_path = Path(args["image_path"])
+    image_path = normalize_path(args["image_path"])
 
     if not image_path.exists():
         return [TextContent(type="text", text=f"Error: Image not found at {image_path}")]
@@ -308,9 +371,63 @@ async def handle_aesthetic_assessment(args: Dict[str, Any]) -> List[TextContent]
     return [TextContent(type="text", text=response)]
 
 
+async def handle_extract_metadata(args: Dict[str, Any]) -> List[TextContent]:
+    """Run metadata extraction only"""
+    image_path = normalize_path(args["image_path"])
+
+    if not image_path.exists():
+        return [TextContent(type="text", text=f"Error: Image not found at {image_path}")]
+
+    # Run metadata extraction
+    metadata_list, _ = agents['metadata'].run([image_path])
+    metadata = metadata_list[0] if metadata_list else {}
+
+    # Format response
+    response = "**Photo Metadata**\n\n"
+    
+    # Basic Info
+    response += f"- **Filename**: {metadata.get('filename', 'Unknown')}\n"
+    response += f"- **Format**: {metadata.get('format', 'Unknown')}\n"
+    response += f"- **Size**: {metadata.get('file_size_mb', 0):.2f} MB\n"
+    response += f"- **Dimensions**: {metadata.get('width', 0)} x {metadata.get('height', 0)}\n\n"
+    
+    # Capture Info
+    response += f"**Capture Details**:\n"
+    response += f"- **Date**: {metadata.get('capture_time', 'Unknown')}\n"
+    response += f"- **Camera**: {metadata.get('camera_make', '')} {metadata.get('camera_model', 'Unknown')}\n"
+    response += f"- **Lens**: {metadata.get('lens_model', 'Unknown')}\n\n"
+    
+    # Settings
+    response += f"**Settings**:\n"
+    response += f"- **ISO**: {metadata.get('iso', 'N/A')}\n"
+    response += f"- **Aperture**: {metadata.get('aperture', 'N/A')}\n"
+    response += f"- **Shutter**: {metadata.get('shutter_speed', 'N/A')}\n"
+    response += f"- **Focal Length**: {metadata.get('focal_length', 'N/A')}\n\n"
+    
+    # Location
+    response += f"**Location**:\n"
+    if metadata.get('gps'):
+        gps = metadata['gps']
+        response += f"- **Coords**: {gps.get('latitude', 0):.4f}, {gps.get('longitude', 0):.4f}\n"
+        if gps.get('altitude'):
+            response += f"- **Altitude**: {gps.get('altitude', 0):.1f}m\n"
+        
+        # Add address if available (from reverse geocoding)
+        if gps.get('latitude') and gps.get('longitude'):
+             # We can manually trigger reverse geocoding if not already present, 
+             # but the metadata agent should have handled it if configured.
+             # Check if address is directly in metadata (it might be added by the agent in future)
+             # For now just show coords
+             pass
+    else:
+        response += "- No GPS data available\n"
+
+    return [TextContent(type="text", text=response)]
+
+
 async def handle_categorization(args: Dict[str, Any]) -> List[TextContent]:
     """Run filtering & categorization only"""
-    image_path = Path(args["image_path"])
+    image_path = normalize_path(args["image_path"])
 
     if not image_path.exists():
         return [TextContent(type="text", text=f"Error: Image not found at {image_path}")]
@@ -319,7 +436,7 @@ async def handle_categorization(args: Dict[str, Any]) -> List[TextContent]:
     metadata_list, _ = agents['metadata'].run([image_path])
     metadata = metadata_list[0] if metadata_list else {}
 
-    quality_list, _ = agents['quality'].run([image_path])
+    quality_list, _ = agents['quality'].run([image_path], [metadata])
     quality = quality_list[0] if quality_list else {}
 
     aesthetic_list, _ = agents['aesthetic'].run([image_path], [metadata])
@@ -357,7 +474,7 @@ async def handle_categorization(args: Dict[str, Any]) -> List[TextContent]:
 
 async def handle_caption_generation(args: Dict[str, Any]) -> List[TextContent]:
     """Run caption generation only"""
-    image_path = Path(args["image_path"])
+    image_path = normalize_path(args["image_path"])
     caption_level = args.get("caption_level", "all")
 
     if not image_path.exists():
@@ -367,7 +484,7 @@ async def handle_caption_generation(args: Dict[str, Any]) -> List[TextContent]:
     metadata_list, _ = agents['metadata'].run([image_path])
     metadata = metadata_list[0] if metadata_list else {}
 
-    quality_list, _ = agents['quality'].run([image_path])
+    quality_list, _ = agents['quality'].run([image_path], [metadata])
     quality = quality_list[0] if quality_list else {}
 
     aesthetic_list, _ = agents['aesthetic'].run([image_path], [metadata])

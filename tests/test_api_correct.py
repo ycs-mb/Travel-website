@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Correct API test with proper request format"""
+"""Correct API test with proper request format
+
+Run with: python tests/test_api_correct.py (from project root)
+Or: cd tests && python test_api_correct.py
+"""
 
 import requests
 from pathlib import Path
 import json
+
+# Get project directory
+PROJECT_DIR = Path(__file__).parent.parent
 
 API_URL = "http://localhost:8000"
 API_KEY = "c3c1059abb9100b9a91eab76b91002fcf61f3fae7e90dfe86954ccf446621c8b"
@@ -11,7 +18,7 @@ API_KEY = "c3c1059abb9100b9a91eab76b91002fcf61f3fae7e90dfe86954ccf446621c8b"
 print("Testing FastAPI Server with Aesthetic Assessment")
 print("=" * 60)
 
-image_path = Path("sample_images/IMG_3339.HEIC")
+image_path = PROJECT_DIR / "sample_images/PXL_20241003_105856630.MP.jpg"
 headers = {"X-API-Key": API_KEY}
 
 # Method 1: Send agents as multipart form fields

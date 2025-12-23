@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
-"""Direct test of aesthetic agent"""
+"""Direct test of aesthetic agent
 
+Run with: python tests/test_aesthetic_direct.py (from project root)
+Or: cd tests && python test_aesthetic_direct.py
+"""
+
+import sys
 from pathlib import Path
+
+# Add parent directory to path for imports
+PROJECT_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_DIR))
+
 import yaml
 from agents.aesthetic_assessment import AestheticAssessmentAgent
 from utils.logger import setup_logger
 
 # Load config
-with open("config.yaml", "r") as f:
+with open(PROJECT_DIR / "config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 # Setup logger
@@ -18,7 +28,7 @@ print("Initializing aesthetic assessment agent...")
 agent = AestheticAssessmentAgent(config, logger)
 
 # Test image
-image_path = Path("sample_images/IMG_3339.HEIC")
+image_path = PROJECT_DIR / "sample_images/IMG_3339.HEIC"
 print(f"\nProcessing: {image_path}")
 
 # Run agent

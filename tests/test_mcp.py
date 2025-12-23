@@ -28,7 +28,13 @@ async def test_mcp_server():
     test_image = None
     sample_dir = Path("sample_images")
     if sample_dir.exists():
-        images = list(sample_dir.glob("*.jpg")) + list(sample_dir.glob("*.png"))
+        images = (
+            list(sample_dir.glob("*.jpg")) + 
+            list(sample_dir.glob("*.jpeg")) +
+            list(sample_dir.glob("*.png")) +
+            list(sample_dir.glob("*.HEIC")) +
+            list(sample_dir.glob("*.heic"))
+        )
         if images:
             test_image = str(images[0].absolute())
 

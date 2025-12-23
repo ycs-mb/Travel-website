@@ -9,11 +9,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 import piexif
-from geopy.geocoders import Nominatim
 
 from utils.logger import log_error, log_info
 from utils.validation import validate_agent_output, create_validation_summary
 from utils.heic_reader import is_heic_file, open_heic_with_pil, get_heic_exif
+from utils.reverse_geocoding import ReverseGeocoder
 
 
 class MetadataExtractionAgent:
@@ -63,8 +63,9 @@ class MetadataExtractionAgent:
         self.logger = logger
         self.agent_config = config.get('agents', {}).get('metadata_extraction', {})
         self.parallel_workers = self.agent_config.get('parallel_workers', 4)
-        # Initialize geocoder for reverse geocoding
-        self.geolocator = Nominatim(user_agent="travel-photo-workflow")
+        
+        # Initialize reverse geocoder
+        self.geocoder = ReverseGeocoder(config, logger)
 
     def _dms_to_decimal(self, degrees: float, minutes: float, seconds: float) -> float:
         """
@@ -91,12 +92,10 @@ class MetadataExtractionAgent:
         Returns:
             Location address or None
         """
-        try:
-            location = self.geolocator.reverse((latitude, longitude), exactly_one=True, language='en', timeout=10)
-            return location.address if location else None
-        except Exception as e:
-            self.logger.warning(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
-            return None
+        location_data = self.geocoder.reverse_geocode(latitude, longitude)
+        if location_data:
+            return location_data.get('formatted')
+        return None
 
     def _extract_image_gps(self, image_path: Path) -> Optional[tuple]:
         """

@@ -166,7 +166,7 @@ cat .env
 
 **Step 2: Start server**
 ```bash
-./start_api.sh
+./scripts/start_api.sh
 # Server loads API_KEY from .env automatically
 ```
 
@@ -339,7 +339,7 @@ echo "Your project ID: $PROJECT_ID"
 ./scripts/setup_api.sh
 
 # 6. Start server
-./start_api.sh
+./scripts/start_api.sh
 
 # 7. Test (in another terminal)
 python tests/test_api.py
@@ -396,7 +396,7 @@ LOG_LEVEL=INFO
 
 ```bash
 # 1. Start server
-./start_api.sh
+./scripts/start_api.sh
 
 # 2. Test WITHOUT key (should fail with 401)
 curl http://localhost:8000/api/v1/analyze/image
@@ -443,7 +443,7 @@ cat .env
 echo $API_KEY  # Should match .env
 
 # 3. Restart server after changing .env
-./start_api.sh
+./scripts/start_api.sh
 ```
 
 ### "Vertex AI client not initialized"

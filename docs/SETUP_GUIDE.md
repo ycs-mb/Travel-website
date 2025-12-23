@@ -58,7 +58,6 @@ This will:
 - ✅ Install FastAPI, Uvicorn, and dependencies
 - ✅ Create necessary directories (api/, uploads/, cache/)
 - ✅ Generate `.env` file with random API key
-- ✅ Create `start_api.sh` startup script
 - ✅ Verify all agent imports
 
 ### Configuration
@@ -83,7 +82,7 @@ api:
 ### Start the Server
 
 ```bash
-./start_api.sh
+./scripts/start_api.sh
 ```
 
 Or manually:
@@ -293,7 +292,7 @@ gcloud auth application-default print-access-token
 **Issue**: Tool calls failing
 ```bash
 # Test MCP server directly
-./test_mcp.sh
+./scripts/test_mcp.sh
 
 # Check for Python errors
 uv run python mcp/photo_analysis_server.py

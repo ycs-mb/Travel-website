@@ -65,6 +65,16 @@ config_path = Path(__file__).parent.parent / "config.yaml"
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
+# Setup Google Cloud authentication from keys.json
+keys_path = Path(__file__).parent.parent / "keys.json"
+if keys_path.exists():
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(keys_path)
+    logger_temp = logging.getLogger("API_SETUP")
+    logger_temp.info(f"Using Google Cloud credentials from: {keys_path}")
+else:
+    logger_temp = logging.getLogger("API_SETUP")
+    logger_temp.warning("keys.json not found - using default credentials")
+
 # Setup logger
 log_level = config.get('logging', {}).get('level', 'INFO')
 logger = setup_logger("API", log_level)
@@ -126,7 +136,7 @@ class CaptionResult(BaseModel):
     concise: str
     standard: str
     detailed: str
-    keywords: List[str]
+    keywords: List[str] = Field(default_factory=list)
 
 
 class TokenUsage(BaseModel):
@@ -371,7 +381,7 @@ async def run_analysis(
 
     # Run quality if needed for filtering
     if 'filtering' in requested_agents or 'caption' in requested_agents:
-        quality_list, _ = agents['quality'].run([image_path])
+        quality_list, _ = agents['quality'].run([image_path], [metadata])
         quality = quality_list[0] if quality_list else {}
     else:
         quality = {}

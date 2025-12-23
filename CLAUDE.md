@@ -410,38 +410,69 @@ cost_tracking:
 ```
 Travel-website/
 ├── CLAUDE.md                   # This file
-├── docs/
+├── README.md                   # Project overview
+├── config.yaml                 # Configuration
+├── orchestrator.py             # Main workflow (CLI)
+├── pyproject.toml              # Dependencies (uv)
+│
+├── docs/                       # All documentation
+│   ├── QUICKSTART.md          # Quick start guide
 │   ├── HLD.md                 # High-level design
 │   ├── LLD.md                 # Low-level design
 │   ├── UML_DIAGRAMS.md        # Architecture diagrams
 │   ├── ACTIVITY_DIAGRAM.md    # Workflow flows
-│   └── QUICKSTART.md          # Quick start guide
+│   ├── API_README.md          # API documentation
+│   ├── FASTAPI_SETUP.md       # FastAPI setup guide
+│   ├── MCP_SETUP.md           # MCP server setup
+│   └── ...                    # Other docs
 │
-├── config.yaml                # Configuration
-├── orchestrator.py            # Main workflow (CLI)
-├── web_app/                   # Flask web application
-│   ├── app.py                # Flask server + routes
-│   ├── templates/            # Jinja2 templates
-│   │   ├── base.html        # Clean SaaS base template
-│   │   ├── index.html       # Dashboard + upload
-│   │   └── report.html      # Detailed tabbed report
-│   └── static/              # CSS, JS, images
+├── scripts/                    # Shell scripts
+│   ├── start_api.sh           # Start FastAPI server
+│   ├── setup_api.sh           # Setup FastAPI
+│   ├── setup_mcp.sh           # Setup MCP server
+│   ├── setup_claude_mcp.sh    # Configure Claude Desktop
+│   ├── generate_api_key.sh    # Generate API key
+│   ├── test_api_server.sh     # Test API endpoints
+│   └── test_mcp.sh            # Test MCP server
 │
-├── agents/                    # 5 agents
+├── tests/                      # Test files
+│   ├── test_api.py            # Full API test suite
+│   ├── test_mcp.py            # MCP server tests
+│   ├── test_quick.py          # Quick API test
+│   ├── test_full_pipeline.py  # Full pipeline test
+│   └── ...                    # Other tests
+│
+├── agents/                     # 5 agents
 │   ├── metadata_extraction.py
 │   ├── quality_assessment.py
 │   ├── aesthetic_assessment.py
 │   ├── filtering_categorization.py
 │   └── caption_generation.py
 │
-├── utils/                     # Logger, validation, helpers
-├── sample_images/             # Input photos (CLI mode)
-├── uploads/                   # Web upload storage
-└── output/                    # Generated outputs (timestamped)
+├── api/                        # FastAPI server
+│   └── fastapi_server.py
+│
+├── mcp/                        # MCP server
+│   └── photo_analysis_server.py
+│
+├── web_app/                    # Flask web application
+│   ├── app.py                 # Flask server + routes
+│   ├── templates/             # Jinja2 templates
+│   │   ├── base.html         # Clean SaaS base template
+│   │   ├── index.html        # Dashboard + upload
+│   │   └── report.html       # Detailed tabbed report
+│   └── static/               # CSS, JS, images
+│
+├── utils/                      # Logger, validation, helpers
+├── sample_images/              # Input photos (CLI mode)
+├── uploads/                    # Web upload storage
+├── cache/                      # Result caching
+├── test_results/               # API test results
+└── output/                     # Generated outputs (timestamped)
     └── YYYYMMDD_HHMMSS/
-        ├── reports/          # Agent outputs + final report
-        ├── logs/             # Workflow logs + errors
-        └── processed_images/ # Processed images
+        ├── reports/           # Agent outputs + final report
+        ├── logs/              # Workflow logs + errors
+        └── processed_images/  # Processed images
 ```
 
 ---

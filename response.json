@@ -1,0 +1,54 @@
+{
+    "job_id": "2978aaa7-e9f2-4d08-b159-94cd934f5545",
+    "status": "completed",
+    "image_id": "PXL_20231014_101439892.MP",
+    "aesthetic": {
+        "composition": 3,
+        "framing": 3,
+        "lighting": 3,
+        "subject_interest": 3,
+        "overall_aesthetic": 3,
+        "notes": "The photo captures a street scene with a mix of elements. The traffic signals and signs are the main focus, and the pedestrians add some life to the image."
+    },
+    "filtering": {
+        "category": "Urban",
+        "subcategories": [
+            "Cityscape",
+            "Street scene"
+        ],
+        "time_category": "Daytime",
+        "location": "(47.3729, 8.5355)",
+        "passes_filter": true,
+        "flagged": false,
+        "flags": [],
+        "reasoning": "Passed all criteria. Quality Score: 3/3, Aesthetic Score: 3/3."
+    },
+    "caption": {
+        "concise": "Urban scene, navigating the city streets.  Direction signs & traffic lights guide the way.",
+        "standard": "City life in motion!  Crossing the road with the guidance of traffic lights and street signs.  Exploring a new city, taking in the everyday details.  Even the mundane can be beautiful.  Where to next?",
+        "detailed": "A snapshot of urban life, capturing the hustle and bustle of a city street.  The scene is framed by a busy intersection, with traffic lights signaling movement and direction.  Street signs point the way to hotels and other destinations, while pedestrians navigate the crosswalks.  The facade of 'Joe & The Juice' hints at a place to pause and recharge. This photo reminds me of the beauty of the everyday – a blend of movement, direction, and the simple act of people interacting in the urban land...",
+        "keywords": []
+    },
+    "token_usage": {
+        "aesthetic": {
+            "prompt_token_count": 1919,
+            "candidates_token_count": 81,
+            "total_token_count": 2000,
+            "estimated_cost_usd": 0.00016822499999999998
+        },
+        "filtering": {
+            "prompt_token_count": 1882,
+            "candidates_token_count": 32,
+            "total_token_count": 1914,
+            "estimated_cost_usd": 0.00015074999999999998
+        },
+        "caption": {
+            "prompt_token_count": 1928,
+            "candidates_token_count": 217,
+            "total_token_count": 2145,
+            "estimated_cost_usd": 0.0002097
+        }
+    },
+    "total_cost_usd": 0.0005286749999999999,
+    "processing_time_seconds": 13.319406
+}

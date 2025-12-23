@@ -1,7 +1,8 @@
 """
 Test script for FastAPI server
 
-Run with: python tests/test_api.py
+Run with: python tests/test_api.py (from project root)
+Or: cd tests && python test_api.py
 """
 
 import requests
@@ -9,12 +10,20 @@ import json
 from pathlib import Path
 import time
 
+# Get project directory
+PROJECT_DIR = Path(__file__).parent.parent
+SAMPLE_IMAGES_DIR = PROJECT_DIR / "sample_images"
+
 # Configuration
 API_URL = "http://localhost:8000"
 API_KEY = "your-secret-api-key-here"  # Update with your actual API key
 
 # Test image path (update with an actual image)
-TEST_IMAGE = Path("sample_images").glob("*.jpg").__next__() if Path("sample_images").exists() else None
+TEST_IMAGE = None
+if SAMPLE_IMAGES_DIR.exists():
+    jpg_files = list(SAMPLE_IMAGES_DIR.glob("*.jpg"))
+    if jpg_files:
+        TEST_IMAGE = jpg_files[0]
 
 
 def test_health_check():
@@ -238,7 +247,7 @@ def run_all_tests():
         requests.get(f"{API_URL}/health", timeout=2)
     except requests.exceptions.ConnectionError:
         print("\n❌ Server is not running!")
-        print("   Start it with: ./start_api.sh")
+        print("   Start it with: ./scripts/start_api.sh")
         print("   Or: uvicorn api.fastapi_server:app --port 8000 --reload")
         return
 
@@ -293,7 +302,8 @@ if __name__ == "__main__":
     import os
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # Load .env from project root
+    load_dotenv(PROJECT_DIR / ".env")
     API_KEY = os.getenv("API_KEY", API_KEY)
 
     run_all_tests()

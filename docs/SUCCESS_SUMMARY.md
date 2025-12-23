@@ -82,7 +82,7 @@ cost_tracking:
 
 ```bash
 cd /Users/ycs/photo-app/Travel-website
-./start_api.sh
+./scripts/start_api.sh
 ```
 
 Server will start on: **http://localhost:8000**
@@ -173,7 +173,7 @@ curl -X POST "http://localhost:8000/api/v1/analyze/image" \
 
 ### 1. Quick API Test
 ```bash
-uv run python test_api_correct.py
+uv run python tests/test_api_correct.py
 ```
 Tests aesthetic assessment with full output.
 
@@ -267,7 +267,7 @@ lsof -i :8000
 pkill -f "uvicorn api.fastapi_server"
 
 # Restart
-./start_api.sh
+./scripts/start_api.sh
 ```
 
 ### 401 Unauthorized

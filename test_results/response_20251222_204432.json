@@ -1,0 +1,55 @@
+{
+    "job_id": "1fa08050-8303-4c2f-adca-95e4e2fa27f8",
+    "status": "completed",
+    "image_id": "PXL_20231014_101439892.MP",
+    "aesthetic": {
+        "composition": 3,
+        "framing": 3,
+        "lighting": 3,
+        "subject_interest": 3,
+        "overall_aesthetic": 3,
+        "notes": "The photo captures a street scene with a focus on street signs and traffic signals. The composition is decent, with some interesting elements, but the framing could be improved. Lighting is adequate. The subject interest is moderate, providing a sense of place but not overly compelling."
+    },
+    "filtering": {
+        "category": "Urban",
+        "subcategories": [
+            "Street Scene",
+            "Architecture",
+            "People"
+        ],
+        "time_category": "Daytime",
+        "location": "(47.3729, 8.5355)",
+        "passes_filter": true,
+        "flagged": false,
+        "flags": [],
+        "reasoning": "Passed all criteria. Quality Score: 3/3, Aesthetic Score: 3/3."
+    },
+    "caption": {
+        "concise": "Urban scene, exploring a new city. Hotels & juice in sight! 🚦",
+        "standard": "Navigating the city streets. A blend of modern and classic architecture, with a hint of green. Spotting directions to hotels and a cozy juice bar. Feeling the vibe of urban exploration during the day. What's your favorite part of city life?",
+        "detailed": "Caught this urban snapshot during the day. The scene captures the essence of city life with a juxtaposition of old and new. The classic architecture of the building, the modern design of the juice bar, and the bustling street scene create a dynamic composition. Traffic signals with unique arrow signs guiding the way. There are directions to hotels and a juice bar. The cloudy sky adds a touch of mystery. A truly enjoyable scene of city exploration. Feeling the city energy, what does the city f...",
+        "keywords": []
+    },
+    "token_usage": {
+        "aesthetic": {
+            "prompt_token_count": 1919,
+            "candidates_token_count": 102,
+            "total_token_count": 2021,
+            "estimated_cost_usd": 0.00017452499999999997
+        },
+        "filtering": {
+            "prompt_token_count": 1882,
+            "candidates_token_count": 34,
+            "total_token_count": 1916,
+            "estimated_cost_usd": 0.00015135
+        },
+        "caption": {
+            "prompt_token_count": 1928,
+            "candidates_token_count": 215,
+            "total_token_count": 2143,
+            "estimated_cost_usd": 0.0002091
+        }
+    },
+    "total_cost_usd": 0.000534975,
+    "processing_time_seconds": 13.294885
+}

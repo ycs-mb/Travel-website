@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Quick test of the FastAPI server"""
+"""Quick test of the FastAPI server
+
+Run with: python tests/test_quick.py (from project root)
+Or: cd tests && python test_quick.py
+"""
 
 import requests
 from pathlib import Path
 import json
+
+# Get project directory
+PROJECT_DIR = Path(__file__).parent.parent
 
 API_URL = "http://localhost:8000"
 API_KEY = "c3c1059abb9100b9a91eab76b91002fcf61f3fae7e90dfe86954ccf446621c8b"
@@ -21,7 +28,7 @@ print("\n" + "=" * 60)
 print("Test 2: Aesthetic Assessment")
 print("=" * 60)
 
-image_path = Path("sample_images/IMG_3339.HEIC")
+image_path = PROJECT_DIR / "sample_images/IMG_3339.HEIC"
 if not image_path.exists():
     print(f"❌ Image not found: {image_path}")
     exit(1)

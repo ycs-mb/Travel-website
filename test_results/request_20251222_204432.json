@@ -1,0 +1,13 @@
+{
+  "endpoint": "POST /api/v1/analyze/image",
+  "timestamp": "2025-12-22T15:14:32Z",
+  "headers": {
+    "X-API-Key": "your-secre...here"
+  },
+  "files": {
+    "file": "PXL_20231014_101439892.MP.jpg"
+  },
+  "form_data": {
+    "agents": ["aesthetic", "filtering", "caption"]
+  }
+}

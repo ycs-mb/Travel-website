@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
-"""Test full pipeline directly"""
+"""Test full pipeline directly
 
+Run with: python tests/test_full_pipeline.py (from project root)
+Or: cd tests && python test_full_pipeline.py
+"""
+
+import sys
 from pathlib import Path
+
+# Add parent directory to path for imports
+PROJECT_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_DIR))
+
 import yaml
 from agents.metadata_extraction import MetadataExtractionAgent
 from agents.aesthetic_assessment import AestheticAssessmentAgent
 from utils.logger import setup_logger
 
 # Load config
-with open("config.yaml", "r") as f:
+with open(PROJECT_DIR / "config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 # Setup logger
 logger = setup_logger("Test", "INFO")
 
 # Test image
-image_path = Path("sample_images/IMG_3339.HEIC")
+image_path = PROJECT_DIR / "sample_images/IMG_3339.HEIC"
 print(f"Processing: {image_path}\n")
 
 # Step 1: Extract metadata

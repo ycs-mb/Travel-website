@@ -3,11 +3,18 @@
 
 set -e  # Exit on error
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Change to project directory
+cd "$PROJECT_DIR"
+
 echo "🚀 Setting up FastAPI Photo Analysis Server..."
 
 # Check if we're in the right directory
 if [ ! -f "config.yaml" ]; then
-    echo "❌ Error: Please run this script from the Travel-website directory"
+    echo "❌ Error: config.yaml not found in $PROJECT_DIR"
     exit 1
 fi
 
@@ -60,25 +67,6 @@ except ImportError as e:
     sys.exit(1)
 "
 
-# 6. Create API startup script
-cat > start_api.sh << 'EOF'
-#!/bin/bash
-# Start FastAPI server
-
-# Load environment variables
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-fi
-
-# Start server
-echo "🚀 Starting FastAPI server on http://localhost:${API_PORT:-8000}"
-echo "📚 API docs available at http://localhost:${API_PORT:-8000}/docs"
-echo ""
-uvicorn api.fastapi_server:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000} --reload
-EOF
-
-chmod +x start_api.sh
-
 echo ""
 echo "✅ FastAPI setup complete!"
 echo ""
@@ -87,6 +75,6 @@ echo "1. Update config.yaml with your GCP project ID (api.google.project)"
 echo "2. Set up Vertex AI credentials:"
 echo "   gcloud auth application-default login"
 echo "3. Start the server:"
-echo "   ./start_api.sh"
+echo "   ./scripts/start_api.sh"
 echo "4. Visit http://localhost:8000/docs for API documentation"
 echo ""

@@ -3,7 +3,7 @@ name = "travel-photo-workflow"
 version = "1.0.0"
 description = "AI-Powered Agentic System for Intelligent Travel Photo Management"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Travel Photo Workflow Team" }
@@ -60,6 +60,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "fastapi>=0.127.0",
     "uvicorn>=0.39.0",
+    "mcp>=1.25.0",
 ]
 
 [project.optional-dependencies]

@@ -31,7 +31,7 @@ You now have **TWO** ways to use your photo analysis agents:
 ./scripts/setup_api.sh
 
 # 2. Start server
-./start_api.sh
+./scripts/start_api.sh
 
 # 3. Test
 curl http://localhost:8000/health
