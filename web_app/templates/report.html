@@ -249,11 +249,15 @@
                         </p>
                     </div>
                     <div>
-                        <strong>Hashtags:</strong>
+                        <strong>Keywords:</strong>
                         <p style="margin: 0.5rem 0; color: var(--accent);">
-                            {% for tag in data.captions.hashtags %}
+                            {% if data.captions.keywords %}
+                            {% for tag in data.captions.keywords %}
                             #{{ tag }}
                             {% endfor %}
+                            {% else %}
+                            <span style="color: var(--text-tertiary);">No keywords generated</span>
+                            {% endif %}
                         </p>
                     </div>
                 </div>

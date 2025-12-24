@@ -160,8 +160,20 @@ Return ONLY valid JSON."""
         lon = gps.get('longitude')
 
         if lat and lon:
-            # In production, use reverse geocoding
-            # For demo, return coordinates
+            try:
+                from geopy.geocoders import Nominatim
+                geolocator = Nominatim(user_agent="travel_agent")
+                location = geolocator.reverse((lat, lon), language='en')
+                if location:
+                    address = location.raw.get('address', {})
+                    city = address.get('city') or address.get('town') or address.get('village')
+                    country = address.get('country')
+                    if city and country:
+                        return f"{city}, {country}"
+                    return f"{location.address} ({lat:.4f}, {lon:.4f})"
+            except Exception as e:
+                log_warning(self.logger, f"Reverse geocoding failed: {e}", "Filtering")
+            # Fallback: return coordinates
             return f"({lat:.4f}, {lon:.4f})"
         return None
 
@@ -387,13 +399,13 @@ Focus on travel photography context: sense of place, cultural elements, activity
 
         # Construct reasoning
         if passes_filter:
-            reasoning = f"Passed all criteria. Quality Score: {technical_score}/{self.min_technical}, Aesthetic Score: {aesthetic_score}/{self.min_aesthetic}."
+            reasoning = f"Passed all criteria. Quality Score: {technical_score}/5 (min: {self.min_technical}), Aesthetic Score: {aesthetic_score}/5 (min: {self.min_aesthetic})."
         else:
             reasons = []
             if technical_score < self.min_technical:
-                reasons.append(f"Quality score ({technical_score}) below threshold ({self.min_technical})")
+                reasons.append(f"Quality score ({technical_score}/5) below threshold ({self.min_technical})")
             if aesthetic_score < self.min_aesthetic:
-                reasons.append(f"Aesthetic score ({aesthetic_score}) below threshold ({self.min_aesthetic})")
+                reasons.append(f"Aesthetic score ({aesthetic_score}/5) below threshold ({self.min_aesthetic})")
             reasoning = f"Rejected: {'; '.join(reasons)}."
 
         # Categorize

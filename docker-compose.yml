@@ -1,0 +1,65 @@
+# ===========================================
+# Docker Compose - Travel Photo Analysis
+# ===========================================
+# Usage:
+#   docker compose up --build        # Build and start all services
+#   docker compose up api            # Start only API server
+#   docker compose logs -f api       # View API logs
+
+services:
+  # FastAPI REST API Server
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: photo-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/keys.json
+      - API_KEY=${API_KEY:-your-secret-api-key-here}
+      - PYTHONPATH=/app
+    volumes:
+      # Mount credentials (create keys.json with your GCP service account)
+      - ./keys.json:/app/secrets/keys.json:ro
+      # Mount config for easy updates without rebuild
+      - ./config.yaml:/app/config.yaml:ro
+      # Persist output data
+      - ./output:/app/output
+      # Cache for embeddings and geocoding
+      - ./cache:/app/cache
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MCP Server (for Claude Desktop integration)
+  # Note: MCP uses stdio, so this is for building/testing the image.
+  # For actual use, run: docker run -i photo-mcp
+  mcp:
+    build:
+      context: .
+      dockerfile: docker/mcp.Dockerfile
+    container_name: photo-mcp
+    stdin_open: true
+    tty: true
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/keys.json
+      - PYTHONPATH=/app
+    volumes:
+      - ./keys.json:/app/secrets/keys.json:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./output:/app/output
+      - ./cache:/app/cache
+      - ./sample_images:/app/sample_images:ro
+    # MCP server doesn't expose ports - uses stdio
+    # To use with Claude Desktop, configure it to run:
+    # docker run -i gcr.io/YOUR_PROJECT/photo-mcp
+
+    # Named volumes for persistence (alternative to bind mounts)
+    # volumes:
+    #   output_data:
+    #   cache_data:

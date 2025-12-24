@@ -152,6 +152,8 @@ class AnalysisResponse(BaseModel):
     job_id: str
     status: str
     image_id: str
+    metadata: Optional[Dict[str, Any]] = None
+    quality: Optional[Dict[str, Any]] = None
     aesthetic: Optional[AestheticScores] = None
     filtering: Optional[FilteringResult] = None
     caption: Optional[CaptionResult] = None
@@ -253,6 +255,8 @@ async def analyze_image(
             job_id=job_id,
             status="completed",
             image_id=temp_path.stem,
+            metadata=result.get('metadata'),
+            quality=result.get('quality'),
             aesthetic=result.get('aesthetic'),
             filtering=result.get('filtering'),
             caption=result.get('caption'),
@@ -378,11 +382,15 @@ async def run_analysis(
     metadata_list, _ = agents['metadata'].run([image_path])
     metadata = metadata_list[0] if metadata_list else {}
     logger.info(f"Metadata extracted: {metadata.get('image_id')}")
+    
+    # Always include metadata in response
+    result['metadata'] = metadata
 
-    # Run quality if needed for filtering
-    if 'filtering' in requested_agents or 'caption' in requested_agents:
+    # Run quality if needed for filtering (or if requested)
+    if 'quality' in requested_agents or 'filtering' in requested_agents or 'caption' in requested_agents:
         quality_list, _ = agents['quality'].run([image_path], [metadata])
         quality = quality_list[0] if quality_list else {}
+        result['quality'] = quality
     else:
         quality = {}
 
@@ -420,7 +428,11 @@ async def run_analysis(
             [image_path], [metadata], [quality], [aesthetic] if aesthetic else [{}], [filtering] if filtering else [{}]
         )
         caption = caption_list[0] if caption_list else {}
-        result['caption'] = caption.get('captions', {}) if 'captions' in caption else caption
+        # Include both captions and keywords in the response
+        caption_response = caption.get('captions', {}) if 'captions' in caption else caption
+        if isinstance(caption_response, dict):
+            caption_response['keywords'] = caption.get('keywords', [])
+        result['caption'] = caption_response
 
         if include_token_usage and 'token_usage' in caption:
             result.setdefault('token_usage', {})['caption'] = caption['token_usage']

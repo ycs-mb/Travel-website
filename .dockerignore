@@ -1,0 +1,86 @@
+# ===========================================
+# Docker Ignore - Travel Photo Analysis
+# ===========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Output and cache (will be mounted as volumes)
+output/
+cache/
+uploads/
+test_results/
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Documentation (not needed in runtime)
+docs/
+*.md
+!README.md
+
+# Tests (not needed in production)
+tests/
+pytest.ini
+
+# Development files
+.env
+.env.bak
+.env.example
+*.bak
+
+# Archives
+archive/
+
+# Lock files
+# uv.lock  - not needed if using requirements.txt
+
+# Sample data (mount separately if needed)
+sample_images/
+
+# Misc
+*.csv
+*.json
+!config.yaml
+response.json
+vacation_analysis.csv
+
+# HD Viewer (separate static app)
+hd_viewer/
+
+# Batch scripts
+batch-run-photo-json2csv/
+scripts/
+examples/
+custom_tools/
+travel_photo_tools/
+
+# Web app (if running API only)
+# web_app/

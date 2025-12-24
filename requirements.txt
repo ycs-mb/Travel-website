@@ -39,3 +39,12 @@ reverse-geocoder>=1.5.1
 # Web framework (optional, for serving)
 flask>=3.0.0
 flask-cors>=4.0.0
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.20
+
+# MCP Server
+mcp>=1.0.0
+
+# HEIC Support
+pillow-heif>=0.7.0

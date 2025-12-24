@@ -1,9 +1,14 @@
 """
-Test script for MCP server
+Test script for MCP server running in Docker
 
-This tests the MCP server implementation locally.
+This tests the MCP server implementation running in the Docker container.
 
 Run with: python tests/test_mcp.py
+Or with flags:
+  --quick    Just list tools
+  --docker   Use Docker container (default)
+  --local    Use local Python
+  --image    Path to test image
 """
 
 import asyncio
@@ -17,15 +22,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
-async def test_mcp_server():
-    """Test MCP server functionality"""
-
-    print("=" * 60)
-    print("🧪 MCP Server Test Suite")
-    print("=" * 60)
-
-    # Find a test image
-    test_image = None
+def find_test_image() -> str:
+    """Find a test image in sample_images directory."""
     sample_dir = Path("sample_images")
     if sample_dir.exists():
         images = (
@@ -36,25 +34,64 @@ async def test_mcp_server():
             list(sample_dir.glob("*.heic"))
         )
         if images:
-            test_image = str(images[0].absolute())
+            return str(images[0].absolute())
+    return "/path/to/your/test/image.jpg"
 
-    if not test_image:
-        print("\n⚠️  Warning: No test images found in sample_images/")
-        print("   Creating a placeholder...")
-        # You'll need to provide an actual image path
-        test_image = "/path/to/your/test/image.jpg"
 
-    print(f"\n📁 Test image: {test_image}")
+def get_docker_server_params() -> StdioServerParameters:
+    """Get MCP server parameters for Docker container."""
+    return StdioServerParameters(
+        command="docker",
+        args=[
+            "exec", "-i", "photo-mcp",
+            "python", "mcp/photo_analysis_server.py"
+        ],
+    )
 
-    # Set up MCP server parameters
+
+def get_local_server_params() -> StdioServerParameters:
+    """Get MCP server parameters for local Python."""
     server_script = Path(__file__).parent.parent / "mcp" / "photo_analysis_server.py"
-
-    server_params = StdioServerParameters(
+    return StdioServerParameters(
         command="uv",
         args=["run", "python", str(server_script)],
     )
 
-    print(f"\n🚀 Starting MCP server: {server_script}")
+
+async def test_mcp_server(use_docker: bool = True, test_image: str = None):
+    """Test MCP server functionality"""
+
+    print("=" * 60)
+    print("🧪 MCP Server Test Suite")
+    print(f"   Mode: {'Docker Container' if use_docker else 'Local Python'}")
+    print("=" * 60)
+
+    # Find a test image
+    if not test_image:
+        test_image = find_test_image()
+    
+    # For Docker, we need to use container-internal paths
+    if use_docker:
+        # Map local path to container path
+        local_path = Path(test_image)
+        if local_path.exists():
+            # The container mounts sample_images, so use relative path
+            container_image = f"/app/sample_images/{local_path.name}"
+            print(f"\n📁 Local image: {test_image}")
+            print(f"📦 Container path: {container_image}")
+            test_image = container_image
+        else:
+            print(f"⚠️  Warning: Test image not found: {test_image}")
+    else:
+        print(f"\n📁 Test image: {test_image}")
+
+    # Get server parameters based on mode
+    if use_docker:
+        server_params = get_docker_server_params()
+        print(f"\n🐳 Using Docker container: photo-mcp")
+    else:
+        server_params = get_local_server_params()
+        print(f"\n🐍 Using local Python")
 
     try:
         async with stdio_client(server_params) as (read, write):
@@ -70,7 +107,8 @@ async def test_mcp_server():
 
                 print(f"✅ Found {len(tools.tools)} tools:")
                 for tool in tools.tools:
-                    print(f"   - {tool.name}: {tool.description[:60]}...")
+                    desc = tool.description[:60] + "..." if len(tool.description) > 60 else tool.description
+                    print(f"   - {tool.name}: {desc}")
 
                 # Test 1: Aesthetic assessment
                 print("\n3️⃣  Testing aesthetic assessment...")
@@ -141,7 +179,8 @@ async def test_mcp_server():
 
                     if result.content:
                         print("✅ Full analysis successful")
-                        print("\n" + result.content[0].text[:500] + "...")
+                        text = result.content[0].text
+                        print("\n" + (text[:500] + "..." if len(text) > 500 else text))
                     else:
                         print("❌ No content returned")
 
@@ -173,19 +212,23 @@ async def test_mcp_server():
         print(f"\n❌ MCP server test failed: {e}")
         import traceback
         traceback.print_exc()
+        
+        if use_docker:
+            print("\n💡 Make sure Docker container is running:")
+            print("   docker compose up mcp -d")
+            print("   docker ps  # should show photo-mcp container")
 
 
-async def test_mcp_tools_list():
+async def test_mcp_tools_list(use_docker: bool = True):
     """Quick test to just list available tools"""
     print("🧪 Quick MCP Tools Test")
+    print(f"   Mode: {'Docker Container' if use_docker else 'Local Python'}")
     print("-" * 40)
 
-    server_script = Path(__file__).parent.parent / "mcp" / "photo_analysis_server.py"
-
-    server_params = StdioServerParameters(
-        command="uv",
-        args=["run", "python", str(server_script)],
-    )
+    if use_docker:
+        server_params = get_docker_server_params()
+    else:
+        server_params = get_local_server_params()
 
     try:
         async with stdio_client(server_params) as (read, write):
@@ -204,6 +247,9 @@ async def test_mcp_tools_list():
 
     except Exception as e:
         print(f"❌ Failed: {e}")
+        if use_docker:
+            print("\n💡 Make sure Docker container is running:")
+            print("   docker compose up mcp -d")
 
 
 if __name__ == "__main__":
@@ -216,14 +262,28 @@ if __name__ == "__main__":
         help="Run quick test (just list tools)"
     )
     parser.add_argument(
+        "--docker",
+        action="store_true",
+        default=True,
+        help="Use Docker container (default)"
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use local Python instead of Docker"
+    )
+    parser.add_argument(
         "--image",
         type=str,
         help="Path to test image"
     )
 
     args = parser.parse_args()
+    
+    # Determine mode
+    use_docker = not args.local
 
     if args.quick:
-        asyncio.run(test_mcp_tools_list())
+        asyncio.run(test_mcp_tools_list(use_docker=use_docker))
     else:
-        asyncio.run(test_mcp_server())
+        asyncio.run(test_mcp_server(use_docker=use_docker, test_image=args.image))
