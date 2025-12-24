@@ -14,6 +14,7 @@ API Documentation:
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Depends, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -169,6 +170,7 @@ class JobStatus(BaseModel):
     progress: int  # 0-100
     message: Optional[str] = None
     result: Optional[AnalysisResponse] = None
+    results: Optional[List[Dict[str, Any]]] = None
 
 
 class TokenUsageStats(BaseModel):
@@ -244,8 +246,13 @@ async def analyze_image(
 
         logger.info(f"Processing image: {file.filename} (job: {job_id})")
 
-        # Run analysis
-        result = await run_analysis(temp_path, request.agents, request.include_token_usage)
+        # Run analysis (in threadpool to avoid blocking event loop)
+        result = await run_in_threadpool(
+            run_analysis, 
+            temp_path, 
+            request.agents, 
+            request.include_token_usage
+        )
 
         # Calculate processing time
         processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -279,6 +286,7 @@ async def analyze_image(
 async def analyze_batch(
     files: List[UploadFile] = File(...),
     agents: List[str] = ["aesthetic", "filtering", "caption"],
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     api_key: str = Depends(verify_api_key)
 ):
     """
@@ -287,6 +295,7 @@ async def analyze_batch(
     **Returns**: Job ID for status checking
     """
     job_id = str(uuid.uuid4())
+    upload_time = datetime.utcnow()
 
     # Create job record
     job_storage[job_id] = {
@@ -294,12 +303,39 @@ async def analyze_batch(
         "progress": 0,
         "total_images": len(files),
         "processed_images": 0,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": upload_time.isoformat(),
         "results": []
     }
 
-    # TODO: Process in background task or queue
-    # For now, return job ID
+    # Create temp directory for this batch
+    batch_dir = Path(tempfile.mkdtemp(prefix=f"batch_{job_id}_"))
+    
+    # Save all files
+    file_paths = []
+    try:
+        for file in files:
+            file_path = batch_dir / (file.filename or f"image_{len(file_paths)}.jpg")
+            with open(file_path, 'wb') as f:
+                shutil.copyfileobj(file.file, f)
+            file_paths.append(file_path)
+            
+        logger.info(f"Batch job {job_id} submitted with {len(file_paths)} images")
+
+        # Queue background processing
+        background_tasks.add_task(
+            process_batch_job,
+            job_id,
+            batch_dir,
+            file_paths,
+            agents
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to setup batch job {job_id}: {e}")
+        shutil.rmtree(batch_dir, ignore_errors=True)
+        job_storage[job_id]["status"] = "failed"
+        job_storage[job_id]["message"] = str(e)
+        raise HTTPException(status_code=500, detail=f"Batch setup failed: {e}")
 
     return {
         "job_id": job_id,
@@ -322,7 +358,8 @@ async def get_job_status(job_id: str, api_key: str = Depends(verify_api_key)):
         status=job["status"],
         progress=job["progress"],
         message=job.get("message"),
-        result=job.get("result")
+        result=job.get("result"),
+        results=job.get("results")
     )
 
 
@@ -367,7 +404,65 @@ async def get_token_usage(api_key: str = Depends(verify_api_key)):
 
 # Helper functions
 
-async def run_analysis(
+def process_batch_job(
+    job_id: str,
+    batch_dir: Path,
+    image_paths: List[Path],
+    agents_list: List[str]
+):
+    """Process a batch of images in background"""
+    logger.info(f"Starting batch job {job_id}")
+    job = job_storage[job_id]
+    job["status"] = "processing"
+    
+    completed_count = 0
+    
+    try:
+        for path in image_paths:
+            try:
+                # Run sync analysis
+                result = run_analysis(path, agents_list, include_token_usage=True)
+                
+                # Add basic info to result if missing
+                if 'metadata' not in result:
+                     result['metadata'] = {'filename': path.name}
+                elif 'filename' not in result['metadata']:
+                     result['metadata']['filename'] = path.name
+
+                job["results"].append({
+                    "image": path.name,
+                    "status": "success",
+                    "data": result
+                })
+            except Exception as e:
+                logger.error(f"Error processing {path.name} in batch {job_id}: {e}")
+                job["results"].append({
+                    "image": path.name,
+                    "status": "failed",
+                    "error": str(e)
+                })
+            
+            completed_count += 1
+            job["processed_images"] = completed_count
+            job["progress"] = int((completed_count / len(image_paths)) * 100)
+            
+        job["status"] = "completed"
+        logger.info(f"Batch job {job_id} completed")
+        
+    except Exception as e:
+        logger.error(f"Batch job {job_id} failed fatally: {e}")
+        job["status"] = "failed"
+        job["message"] = str(e)
+        
+    finally:
+        # Cleanup batch directory
+        try:
+            shutil.rmtree(batch_dir)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup batch dir {batch_dir}: {e}")
+
+
+def run_analysis(
     image_path: Path,
     requested_agents: List[str],
     include_token_usage: bool
