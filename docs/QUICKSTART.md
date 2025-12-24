@@ -58,10 +58,64 @@ vertex_ai:
 
 ## ▶️ Running the Application
 
-### Web Application (Recommended)
+### Option 1: Docker Deployment (Recommended for Production)
 
 ```bash
-# Start Flask server with uv
+# Start all services with Docker Compose
+docker compose up --build
+
+# Or start just the API server
+docker compose up api
+
+# Access:
+# - API Server: http://localhost:8000
+# - API Docs: http://localhost:8000/docs
+```
+
+**Docker Features:**
+- ✅ Production-ready containerized deployment
+- 🔧 Auto-restart on failure
+- 📊 Health checks built-in
+- 🔒 Isolated environment
+- 📦 Easy scaling with docker-compose
+
+**See [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md) for complete Docker guide**
+
+### Option 2: FastAPI Server (API Access)
+
+```bash
+# Setup and start API server
+./scripts/setup_api.sh
+./scripts/start_api.sh
+
+# Access:
+# - API: http://localhost:8000
+# - Swagger UI: http://localhost:8000/docs
+# - ReDoc: http://localhost:8000/redoc
+```
+
+**API Features:**
+- 🚀 RESTful endpoints for all agents
+- 📚 Auto-generated documentation
+- 🔑 API key authentication
+- 🧪 Easy testing with Swagger UI
+- 📊 JSON responses
+
+**Generate API Key:**
+```bash
+./scripts/generate_api_key.sh
+```
+
+**See [API_README.md](./API_README.md) for complete API guide**
+
+### Option 3: Web Application (Interactive UI)
+
+```bash
+# NOTE: Web app now requires FastAPI server running
+# Start API server first
+./scripts/start_api.sh
+
+# Then start Flask web interface
 uv run python web_app/app.py
 
 # OR activate venv first
@@ -77,8 +131,9 @@ python web_app/app.py
 - 📈 Run history and status tracking
 - 🎨 Clean SaaS UI design
 - 🔢 Token usage visualization
+- 🔄 Calls FastAPI server for analysis
 
-### CLI Workflow (Alternative)
+### Option 4: CLI Workflow
 
 ```bash
 # Prepare images
@@ -96,6 +151,19 @@ uv run python orchestrator.py
 # → Stage 3: Filtering & Captions...
 # ✓ Workflow complete
 ```
+
+### Option 5: Batch CSV Processing
+
+```bash
+# Process folder of images and export to CSV
+cd batch-run-photo-json2csv
+python main.py /path/to/images output.csv --api-key YOUR_API_KEY
+
+# Recursive mode (searches subdirectories)
+python main.py /path/to/images output.csv --recursive
+```
+
+**See [BATCH_PROCESSING.md](./BATCH_PROCESSING.md) for complete batch guide**
 
 ---
 
@@ -369,15 +437,41 @@ EOF
 Travel-website/
 ├── config.yaml                 # Configuration file
 ├── .env                        # Environment variables (don't commit!)
+├── keys.json                   # GCP service account key (don't commit!)
+├── docker-compose.yml          # Docker deployment config
+│
 ├── web_app/
-│   └── app.py                 # Flask web server (start here!)
+│   └── app.py                 # Flask web server (calls API)
 ├── orchestrator.py             # CLI workflow entry point
+│
+├── api/
+│   └── fastapi_server.py      # FastAPI REST server
+│
+├── mcp/
+│   └── photo_analysis_server.py # MCP server (Claude Desktop)
+│
+├── docker/
+│   ├── api.Dockerfile         # API container image
+│   └── mcp.Dockerfile         # MCP container image
+│
+├── scripts/
+│   ├── start_api.sh           # Start FastAPI server
+│   ├── setup_api.sh           # Setup API environment
+│   ├── setup_mcp.sh           # Setup MCP server
+│   ├── generate_api_key.sh    # Generate secure API key
+│   ├── test_api_server.sh     # Test API endpoints
+│   └── test_mcp.sh            # Test MCP server
+│
+├── batch-run-photo-json2csv/  # Batch CSV processing tool
+│   ├── main.py               # Batch processor
+│   └── README.md             # Batch tool docs
 │
 ├── sample_images/              # Add your photos here (CLI mode)
 │   ├── photo1.jpg
 │   └── ...
 │
 ├── uploads/                    # Web upload temporary storage
+├── cache/                      # Geocoding & results cache
 │
 ├── agents/                     # Agent implementations
 │   ├── metadata_extraction.py
@@ -389,7 +483,22 @@ Travel-website/
 ├── utils/                      # Shared utilities
 │   ├── logger.py              # Logging
 │   ├── validation.py          # Schemas
-│   └── helpers.py             # File I/O
+│   ├── helpers.py             # File I/O
+│   └── reverse_geocoding.py   # GPS → Location names
+│
+├── tests/                      # Test suites
+│   ├── test_api.py            # API tests
+│   ├── test_mcp.py            # MCP tests
+│   └── test_full_pipeline.py  # End-to-end tests
+│
+├── docs/                       # Documentation
+│   ├── QUICKSTART.md          # This file
+│   ├── HLD.md                 # High-level design
+│   ├── LLD.md                 # Low-level design
+│   ├── API_README.md          # API documentation
+│   ├── MCP_SETUP.md           # MCP setup guide
+│   ├── DOCKER_DEPLOYMENT.md   # Docker guide
+│   └── ...
 │
 └── output/                     # Generated outputs (timestamped)
     └── YYYYMMDD_HHMMSS/
@@ -410,6 +519,14 @@ vertex_ai:
   project: "your-project-id"      # Your GCP project ID
   location: "us-central1"         # GCP region
   model: "gemini-1.5-flash"       # Model to use
+
+# Reverse Geocoding (GPS → Location Names)
+reverse_geocoding:
+  enabled: true                   # Enable location name lookup
+  cache_enabled: true             # Cache results to reduce API calls
+  cache_ttl_hours: 24            # Cache validity (hours)
+  timeout_seconds: 5             # Request timeout
+  user_agent: "TravelPhotoAnalysis/1.0"
 
 # Thresholds
 thresholds:
@@ -434,6 +551,12 @@ agents:
 error_handling:
   max_retries: 3
   continue_on_error: true        # Don't stop on single image failure
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true                   # Auto-reload on code changes (dev only)
 ```
 
 ---
@@ -524,25 +647,54 @@ nano config.yaml
 
 ## 🎯 Next Steps
 
-1. **Start web app** → `uv run python web_app/app.py`
-2. **Upload photos** → Drag and drop on `http://localhost:5001`
-3. **Process images** → Click "Upload and Process"
-4. **View results** → Click on completed run
-5. **Explore tabs** → See metadata, quality, aesthetic, filtering, captions
-6. **Check tokens** → Monitor API usage at bottom of tabs
-7. **Read detailed docs** → See Documentation Structure above
+**For Quick Testing:**
+1. **Start API server** → `./scripts/start_api.sh`
+2. **Test API** → Visit `http://localhost:8000/docs`
+3. **Try endpoints** → Use Swagger UI to upload images
+
+**For Production Deployment:**
+1. **Setup Docker** → `docker compose up --build`
+2. **Verify health** → `curl http://localhost:8000/health`
+3. **View logs** → `docker compose logs -f api`
+
+**For Interactive Use:**
+1. **Start API server** → `./scripts/start_api.sh`
+2. **Start web app** → `uv run python web_app/app.py`
+3. **Upload photos** → Drag and drop on `http://localhost:5001`
+4. **Process images** → Click "Upload and Process"
+5. **View results** → Click on completed run
+6. **Explore tabs** → See metadata, quality, aesthetic, filtering, captions
+7. **Check tokens** → Monitor API usage at bottom of tabs
+
+**For Batch Processing:**
+1. **Setup batch tool** → `cd batch-run-photo-json2csv`
+2. **Process folder** → `python main.py /path/to/images output.csv`
+3. **Open CSV** → View results in Excel/Google Sheets
+
+**For Claude Desktop Integration:**
+1. **Setup MCP** → `./scripts/setup_mcp.sh`
+2. **Configure Claude** → `./scripts/setup_claude_mcp.sh`
+3. **Restart Claude** → Restart Claude Desktop app
+4. **Use in Claude** → "Analyze this photo: /path/to/image.jpg"
+
+**Read detailed docs** → See Documentation Structure below
 
 ---
 
 ## 💡 Tips
 
-- **Web UI is recommended** for ease of use and visualization
+- **Docker is recommended for production** - Easy deployment, health checks, auto-restart
+- **API server for integration** - RESTful endpoints for apps and services
+- **Web UI for interactive use** - Best for exploring results visually
+- **Batch CSV for large datasets** - Process hundreds of images to spreadsheet
 - **First run takes longer** due to dependency loading and model initialization
 - **Subsequent runs faster** with warm caches
 - **Monitor token usage** to optimize API costs
 - **Adjust thresholds** for your use case in `config.yaml`
-- **Use reverse geocoding** to get location names from GPS coordinates
+- **Use reverse geocoding** to get location names from GPS coordinates (free!)
 - **Check filtering reasoning** to understand automated decisions
+- **Generate secure API keys** with `./scripts/generate_api_key.sh`
+- **Test before deploying** with `./scripts/test_api_server.sh`
 
 ---
 

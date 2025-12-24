@@ -764,7 +764,318 @@ def assess_with_vlm(self, image_path: Path) -> Dict[str, Any]:
 
 ---
 
+## Utility Modules
+
+### Reverse Geocoding (`utils/reverse_geocoding.py`)
+
+**Purpose:** Convert GPS coordinates to human-readable location names using OpenStreetMap's Nominatim service.
+
+**Specifications:**
+
+| Aspect | Details |
+|--------|---------|
+| **Service** | Nominatim (OpenStreetMap) |
+| **Caching** | Local JSON file cache |
+| **Rate Limiting** | 1 request/second (Nominatim TOS) |
+| **Cache TTL** | 24 hours (configurable) |
+| **Fallback** | Graceful degradation if service unavailable |
+
+**Implementation:**
+
+```python
+class ReverseGeocoder:
+    def __init__(self, config: Dict, logger: logging.Logger):
+        self.logger = logger
+        self.config = config.get('reverse_geocoding', {})
+
+        # Configuration
+        self.enabled = self.config.get('enabled', True)
+        self.cache_enabled = self.config.get('cache_enabled', True)
+        self.cache_ttl_hours = self.config.get('cache_ttl_hours', 24)
+        self.timeout = self.config.get('timeout_seconds', 5)
+        self.user_agent = self.config.get('user_agent', 'TravelPhotoAnalysis/1.0')
+
+        # Initialize geocoder
+        if self.enabled:
+            self.geolocator = Nominatim(user_agent=self.user_agent, timeout=self.timeout)
+
+        # Load cache
+        self.cache_file = Path(__file__).parent.parent / 'cache' / 'geocoding_cache.json'
+        self.cache = self._load_cache() if self.cache_enabled else {}
+
+        # Rate limiting
+        self.last_request_time = 0
+        self.min_request_interval = 1.0  # seconds
+
+    def get_location_name(self, lat: float, lon: float) -> Optional[str]:
+        """Convert GPS coordinates to location name with caching."""
+        if not self.enabled:
+            return None
+
+        # Check cache first
+        cache_key = self._get_cache_key(lat, lon)
+        if cache_key in self.cache and self._is_cache_valid(self.cache[cache_key]):
+            return self.cache[cache_key]['location']
+
+        # Rate limiting
+        self._rate_limit()
+
+        try:
+            # Call Nominatim API
+            location = self.geolocator.reverse(f"{lat}, {lon}")
+            location_name = location.address if location else None
+
+            # Cache the result
+            if self.cache_enabled and location_name:
+                self.cache[cache_key] = {
+                    'location': location_name,
+                    'timestamp': datetime.now().isoformat()
+                }
+                self._save_cache()
+
+            return location_name
+
+        except (GeocoderTimedOut, GeocoderServiceError) as e:
+            log_error(self.logger, "ReverseGeocoding", "ServiceError", str(e), "warning")
+            return None
+```
+
+**Cache Format:**
+
+```json
+{
+  "49.3988,8.6724": {
+    "location": "Church of the Holy Spirit, Fischmarkt, Altstadt, Heidelberg...",
+    "timestamp": "2024-12-24T10:30:00"
+  }
+}
+```
+
+**Benefits:**
+- ✅ Free service (no API key required)
+- ✅ Persistent caching (reduces API calls)
+- ✅ Rate limiting (respects Nominatim TOS)
+- ✅ Graceful fallback (continues if service down)
+- ✅ Cache expiry (ensures fresh data)
+
+---
+
+## API Server Integration
+
+### FastAPI Server (`api/fastapi_server.py`)
+
+**Purpose:** Expose all 5 agents as RESTful API endpoints for programmatic access.
+
+**Specifications:**
+
+| Aspect | Details |
+|--------|---------|
+| **Framework** | FastAPI 0.100+ |
+| **Port** | 8000 (configurable) |
+| **Authentication** | API key (X-API-Key header) |
+| **Documentation** | Auto-generated (Swagger UI, ReDoc) |
+| **CORS** | Enabled (configurable origins) |
+
+**Endpoints:**
+
+```python
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.post("/analyze")
+async def analyze_full_pipeline(
+    file: UploadFile = File(...),
+    api_key: str = Header(..., alias="X-API-Key")
+):
+    """Run complete 5-agent pipeline on uploaded image."""
+    # 1. Validate API key
+    # 2. Save uploaded file
+    # 3. Run all agents sequentially
+    # 4. Return combined results with token usage
+    pass
+
+@app.post("/analyze/metadata")
+async def analyze_metadata(file: UploadFile, api_key: str = Header(...)):
+    """Run Agent 1 only."""
+    pass
+
+@app.post("/analyze/quality")
+async def analyze_quality(file: UploadFile, api_key: str = Header(...)):
+    """Run Agents 1+2."""
+    pass
+
+@app.post("/analyze/aesthetic")
+async def analyze_aesthetic(file: UploadFile, api_key: str = Header(...)):
+    """Run Agents 1+3."""
+    pass
+
+@app.post("/analyze/filter")
+async def analyze_filter(file: UploadFile, api_key: str = Header(...)):
+    """Run Agents 1+2+3+4."""
+    pass
+
+@app.post("/analyze/caption")
+async def analyze_caption(file: UploadFile, api_key: str = Header(...)):
+    """Run complete pipeline (Agents 1+2+3+4+5)."""
+    pass
+```
+
+**Response Format:**
+
+```json
+{
+  "image_id": "img_20241224_103045",
+  "filename": "vacation.jpg",
+  "metadata": {...},
+  "quality": {...},
+  "aesthetic": {...},
+  "filtering": {...},
+  "caption": {...},
+  "token_usage": {
+    "total_tokens": 2847,
+    "estimated_cost_usd": 0.0031
+  },
+  "processing_time_seconds": 4.2
+}
+```
+
+---
+
+## Batch Processing Tool
+
+### CSV Exporter (`batch-run-photo-json2csv/main.py`)
+
+**Purpose:** Process folders of images and export results to CSV for spreadsheet analysis.
+
+**Specifications:**
+
+| Aspect | Details |
+|--------|---------|
+| **Input** | Folder path (with optional recursion) |
+| **Output** | CSV file + errors CSV |
+| **API** | Calls FastAPI server for each image |
+| **Progress** | Real-time progress bar |
+| **Error Handling** | Separate error CSV file |
+
+**Implementation Pattern:**
+
+```python
+def process_folder(folder_path: Path, output_csv: Path, api_url: str, api_key: str, recursive: bool = False):
+    """Process all images in folder and export to CSV."""
+
+    # 1. Find all image files
+    image_files = find_images(folder_path, recursive)
+
+    # 2. Process each image via API
+    results = []
+    errors = []
+
+    for img_path in tqdm(image_files, desc="Processing"):
+        try:
+            # Call FastAPI /analyze endpoint
+            response = requests.post(
+                f"{api_url}/analyze",
+                files={'file': open(img_path, 'rb')},
+                headers={'X-API-Key': api_key},
+                timeout=60
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Flatten for CSV
+            flat_result = flatten_result(result)
+            results.append(flat_result)
+
+        except Exception as e:
+            errors.append({'filename': str(img_path), 'error': str(e)})
+
+    # 3. Write results to CSV
+    write_csv(results, output_csv)
+
+    # 4. Write errors to separate CSV
+    if errors:
+        write_csv(errors, output_csv.with_suffix('.errors.csv'))
+
+    return len(results), len(errors)
+```
+
+**CSV Columns:**
+
+```csv
+filename,date_taken,camera_model,gps_latitude,gps_longitude,location,quality_score,sharpness,exposure,noise,aesthetic_score,composition,lighting,framing,category,passes_filter,caption_concise,caption_standard,keywords,token_usage,estimated_cost
+```
+
+---
+
+## Docker Deployment
+
+### Containerization
+
+**API Container (`docker/api.Dockerfile`):**
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY pyproject.toml uv.lock ./
+RUN pip install uv && uv sync --frozen
+
+# Copy application code
+COPY . .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Run FastAPI server
+CMD ["uv", "run", "uvicorn", "api.fastapi_server:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**Docker Compose (`docker-compose.yml`):**
+
+```yaml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: photo-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/keys.json
+      - API_KEY=${API_KEY:-your-secret-api-key-here}
+    volumes:
+      - ./keys.json:/app/secrets/keys.json:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./output:/app/output
+      - ./cache:/app/cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+```
+
+---
+
+## Related Documentation
+
 **For high-level overview, see [HLD.md](./HLD.md)**
 **For architecture diagrams, see [UML_DIAGRAMS.md](./UML_DIAGRAMS.md)**
 **For workflow visualization, see [ACTIVITY_DIAGRAM.md](./ACTIVITY_DIAGRAM.md)**
 **For quick setup, see [QUICKSTART.md](./QUICKSTART.md)**
+**For Docker deployment, see [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)**
+**For batch processing, see [BATCH_PROCESSING.md](./BATCH_PROCESSING.md)**
+**For API documentation, see [API_README.md](./API_README.md)**

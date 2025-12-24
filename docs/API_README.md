@@ -4,27 +4,59 @@ Complete guide for using the Travel Photo Analysis agents as APIs.
 
 ## 🎯 What's Available
 
-You now have **TWO** ways to use your photo analysis agents:
+You now have **MULTIPLE** ways to use your photo analysis agents:
 
-### 1️⃣ **REST API (FastAPI)** - For Web/Mobile Apps
+### 1️⃣ **Docker Deployment** - Production (Recommended)
+- **Perfect for**: Production deployments, cloud hosting
+- **Documentation**: Auto-generated at `/docs` (Swagger UI)
+- **Authentication**: API key based
+- **Features**: Health checks, auto-restart, easy scaling
+- **Status**: ✅ **Ready to use**
+- **Guide**: [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)
+
+### 2️⃣ **REST API (FastAPI)** - For Web/Mobile Apps
 - **Perfect for**: Web applications, mobile apps, microservices, any HTTP client
 - **Documentation**: Auto-generated at `/docs` (Swagger UI)
 - **Authentication**: API key based
 - **Protocol**: HTTP/HTTPS
 - **Status**: ✅ **Ready to use**
 
-### 2️⃣ **MCP Server** - For Claude Desktop
+### 3️⃣ **Batch CSV Tool** - For Large Datasets
+- **Perfect for**: Processing hundreds of images, spreadsheet analysis
+- **Documentation**: Built-in help
+- **Output**: CSV files for Excel/Google Sheets
+- **Protocol**: HTTP → FastAPI
+- **Status**: ✅ **Ready to use**
+- **Guide**: [BATCH_PROCESSING.md](./BATCH_PROCESSING.md)
+
+### 4️⃣ **MCP Server** - For Claude Desktop
 - **Perfect for**: Claude Desktop integration, AI-native workflows
 - **Documentation**: Built into Claude Desktop
 - **Authentication**: Local (no auth needed)
 - **Protocol**: Model Context Protocol (MCP)
 - **Status**: ✅ **Ready to use**
+- **Guide**: [MCP_SETUP.md](./MCP_SETUP.md)
 
 ---
 
 ## 🚀 Quick Start (Choose One)
 
-### Option A: REST API
+### Option A: Docker (Production)
+
+```bash
+# 1. Start services
+docker compose up --build
+
+# 2. Access API
+curl http://localhost:8000/health
+
+# 3. View docs
+open http://localhost:8000/docs
+```
+
+**Guide**: [DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)
+
+### Option B: REST API (Development)
 
 ```bash
 # 1. Setup
@@ -39,7 +71,23 @@ curl http://localhost:8000/health
 
 **Access API docs**: http://localhost:8000/docs
 
-### Option B: MCP Server
+### Option C: Batch CSV Processing
+
+```bash
+# 1. Ensure API is running
+./scripts/start_api.sh
+
+# 2. Process images
+cd batch-run-photo-json2csv
+python main.py /path/to/photos output.csv --api-key YOUR_KEY
+
+# 3. Open results
+open output.csv
+```
+
+**Guide**: [BATCH_PROCESSING.md](./BATCH_PROCESSING.md)
+
+### Option D: MCP Server (Claude Desktop)
 
 ```bash
 # 1. Setup
@@ -51,16 +99,24 @@ curl http://localhost:8000/health
 "Analyze this photo: /path/to/image.jpg"
 ```
 
+**Guide**: [MCP_SETUP.md](./MCP_SETUP.md)
+
 ---
 
 ## 📚 Complete Documentation
 
 | Document | Description |
 |----------|-------------|
-| **[SETUP_GUIDE.md](SETUP_GUIDE.md)** | ⭐ **START HERE** - Complete setup & testing guide |
-| **[API_QUICKSTART.md](docs/API_QUICKSTART.md)** | Quick examples for both APIs |
-| **[API_INTEGRATION_OPTIONS.md](docs/API_INTEGRATION_OPTIONS.md)** | 8 different integration approaches |
-| **[TOKEN_OPTIMIZATION.md](docs/TOKEN_OPTIMIZATION.md)** | Cost optimization strategies |
+| **[QUICKSTART.md](./QUICKSTART.md)** | ⭐ **START HERE** - 5-minute setup guide |
+| **[DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)** | 🐳 Docker & production deployment |
+| **[BATCH_PROCESSING.md](./BATCH_PROCESSING.md)** | 📊 Batch CSV processing guide |
+| **[MCP_SETUP.md](./MCP_SETUP.md)** | 🤖 Claude Desktop integration |
+| **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** | Complete setup & testing guide |
+| **[API_QUICKSTART.md](./API_QUICKSTART.md)** | Quick examples for APIs |
+| **[API_INTEGRATION_OPTIONS.md](./API_INTEGRATION_OPTIONS.md)** | Integration approaches |
+| **[TOKEN_OPTIMIZATION.md](./TOKEN_OPTIMIZATION.md)** | Cost optimization strategies |
+| **[HLD.md](./HLD.md)** | High-level design document |
+| **[LLD.md](./LLD.md)** | Low-level design document |
 
 ---
 
@@ -367,6 +423,12 @@ kubectl apply -f k8s/service.yaml
 
 ### 6. Social Media Manager
 → Use **MCP Server** to get caption suggestions in Claude Desktop
+
+### 7. Bulk Photo Processing
+→ Use **Batch CSV Tool** to process entire photo library and export to spreadsheet
+
+### 8. Photo Contest Judging
+→ Use **Docker/API** to automatically score and rank submitted photos
 
 ---
 

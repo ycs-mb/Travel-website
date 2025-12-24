@@ -3,7 +3,7 @@
 
 ### System Overview
 
-This is a **production-ready, 5-agent agentic workflow system** with a **Flask web application** for intelligent travel photo organization. The system uses specialized AI agents powered by Vertex AI working in a coordinated pipeline to automatically organize, assess, categorize, and enhance travel photographs.
+This is a **production-ready, 5-agent agentic workflow system** with **multiple deployment options** for intelligent travel photo organization. The system uses specialized AI agents powered by Vertex AI working in a coordinated pipeline to automatically organize, assess, categorize, and enhance travel photographs.
 
 **Key Statistics:**
 - **5 AI Agents** - Each a domain specialist
@@ -11,7 +11,16 @@ This is a **production-ready, 5-agent agentic workflow system** with a **Flask w
 - **Scalable** - Configurable workers and batch sizes
 - **Modular** - Each agent independent and testable
 - **Observable** - Structured logging, validation, and token tracking
-- **Web Interface** - Flask app with Clean SaaS UI for upload and visualization
+- **Multiple Interfaces** - Docker, FastAPI, Flask Web UI, CLI, Batch CSV, MCP Server
+- **Production Ready** - Containerized deployment with health checks and auto-restart
+
+**Deployment Options:**
+1. **Docker Compose** - Production containerized deployment (Recommended)
+2. **FastAPI Server** - RESTful API for web/mobile apps
+3. **Flask Web UI** - Interactive interface for manual uploads
+4. **CLI Orchestrator** - Command-line workflow execution
+5. **Batch CSV Tool** - Process folders and export to spreadsheet
+6. **MCP Server** - Claude Desktop integration via Model Context Protocol
 
 ---
 
@@ -20,57 +29,71 @@ This is a **production-ready, 5-agent agentic workflow system** with a **Flask w
 ### Complete System Flow
 
 ```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         DEPLOYMENT LAYER                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐│
+│  │ Docker       │  │ FastAPI      │  │ Flask Web UI │  │ Batch CSV   ││
+│  │ Compose      │  │ REST Server  │  │ (Port 5001)  │  │ Processor   ││
+│  │ (Port 8000)  │  │ (Port 8000)  │  │ Calls API    │  │ Calls API   ││
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘│
+│         │                  │                  │                  │       │
+│         └─────────────────┬┴──────────────────┴──────────────────┘       │
+│                           │                                              │
+└───────────────────────────┼──────────────────────────────────────────────┘
+                            │ HTTP/REST API or Direct Invocation
+                            ▼
+              ┌─────────────────────────────┐
+              │ ORCHESTRATOR / API HANDLER  │
+              │  - Request routing          │
+              │  - Agent coordination       │
+              └──────────────┬──────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────┐
+              │ AGENT 1:                 │
+              │ Metadata Extraction      │
+              │ + Reverse Geocoding      │
+              │   (Nominatim/OSM)        │
+              └────┬─────────────┬───────┘
+                   │             │
+            ┌──────▼──┐    ┌─────▼──────────┐
+            │ AGENT 2 │    │ AGENT 3        │  ◄── PARALLEL
+            │ Quality │    │ Aesthetic      │      (ThreadPoolExecutor)
+            │ OpenCV  │    │ Vertex AI      │      + Token Tracking
+            └──────┬──┘    └──────┬─────────┘
+                   └────────┬──────┘
+                            │
+            ┌───────────────┴─────────────┐
+            │ AGENT 4: Filtering &        │  ◄── Sequential
+            │ Categorization              │      + Reasoning
+            │ (Vertex AI + Rules)         │      + Token Tracking
+            └───────────────┬─────────────┘
+                            │
+            ┌───────────────▼─────────────┐
+            │ AGENT 5: Caption Generation │  ◄── Token Tracking
+            │ (Vertex AI)                 │
+            └───────────────┬─────────────┘
+                            │
+                            ▼
+              ┌────────────────────────┐
+              │ OUTPUTS:               │
+              │ - JSON Reports         │
+              │ - CSV Export           │
+              │ - Logs + Token Usage   │
+              │ - Web UI Display       │
+              │ - API Response         │
+              └────────────────────────┘
+                            │
+                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ WEB APPLICATION (Flask - Port 5001)                            │
-│  - Drag-and-drop upload interface                              │
-│  - Run history and status tracking                             │
-│  - Interactive tabbed reports                                   │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ Upload Photos
-                       ▼
-         ┌────────────────────────┐
-         │ AGENT 1:               │
-         │ Metadata Extraction    │
-         │ + Reverse Geocoding    │
-         └────┬─────────────┬─────┘
-              │             │
-       ┌──────▼─┐    ┌──────▼──────────┐
-       │ AGENT 2 │    │ AGENT 3        │  ◄── PARALLEL 
-       │ Quality │    │ Aesthetic      │      (ThreadPoolExecutor)
-       │ OpenCV  │    │ Vertex AI      │      + Token Tracking
-       └──────┬──┘    └──────┬─────────┘
-              └───────┬──────┘
-                      │
-       ┌──────────────┴──────────────┐
-       │ AGENT 4: Filtering &        │  ◄── Sequential
-       │ Categorization              │      + Reasoning
-       │ (Vertex AI + Rules)         │      + Token Tracking
-       └──────────────┬──────────────┘
-                      │
-       ┌──────────────▼──────────────┐
-       │ AGENT 5: Caption Generation │  ◄── Token Tracking
-       │ (Vertex AI)                 │
-       └──────────────┬──────────────┘
-                      │
-                      ▼
-         ┌────────────────────────┐
-         │ OUTPUTS:               │
-         │ - JSON Reports         │
-         │ - Logs + Token Usage   │
-         │ - Web UI Display       │
-         └────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ WEB REPORT VIEW                                                 │
-│  - Image gallery with thumbnails                                │
-│  - Tabbed details per image:                                    │
-│    ✓ Metadata (date, camera, GPS location, dimensions)         │
-│    ✓ Quality (scores, issues)                                   │
-│    ✓ Aesthetic (composition, lighting, framing, analysis)       │
-│    ✓ Filtering (category, reasoning)                            │
-│    ✓ Caption (concise, standard, keywords)                      │
-│  - Token usage display                                          │
+│ PRESENTATION LAYER                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐         │
+│  │ Web Report   │  │ API JSON     │  │ CSV Export    │         │
+│  │ View         │  │ Response     │  │ (Spreadsheet) │         │
+│  │ - Gallery    │  │ - Structured │  │ - Flat table  │         │
+│  │ - Tabbed UI  │  │ - REST       │  │ - Bulk data   │         │
+│  │ - Token viz  │  │ - Programm.  │  │ - Analysis    │         │
+│  └──────────────┘  └──────────────┘  └───────────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -82,6 +105,235 @@ This is a **production-ready, 5-agent agentic workflow system** with a **Flask w
 | **2. Parallel Assessment** | Agents 2, 3 | Parallel | Medium (CPU/VLM) | ~500-1000/img |
 | **3. Filtering** | Agent 4 | Sequential | Medium (VLM) | ~300-600/img |
 | **4. Captions** | Agent 5 | Sequential | Medium (VLM) | ~600-1200/img |
+
+---
+
+## Deployment Architectures
+
+### 1. Docker Compose Deployment (Production)
+
+**Components:**
+- **API Container** (photo-api) - FastAPI server on port 8000
+- **MCP Container** (photo-mcp) - MCP server for Claude Desktop
+- **Shared Volumes** - keys.json, config.yaml, output, cache
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Docker Compose Environment          │
+│                                      │
+│  ┌────────────────┐  ┌────────────┐│
+│  │ photo-api      │  │ photo-mcp  ││
+│  │ Port: 8000     │  │ stdio      ││
+│  │ Health checks  │  │ interactive││
+│  │ Auto-restart   │  │            ││
+│  └────────────────┘  └────────────┘│
+│         │                    │      │
+│         └────────┬───────────┘      │
+│                  │                  │
+│  ┌──────────────▼──────────────┐   │
+│  │ Shared Volumes:             │   │
+│  │ - keys.json (credentials)   │   │
+│  │ - config.yaml (config)      │   │
+│  │ - output/ (results)         │   │
+│  │ - cache/ (geocoding)        │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- ✅ Production-ready containerization
+- ✅ Automatic health checks
+- ✅ Auto-restart on failure
+- ✅ Isolated environment
+- ✅ Easy scaling and deployment
+
+**Usage:**
+```bash
+docker compose up --build      # Start all services
+docker compose up api          # Start only API
+docker compose logs -f api     # View logs
+docker compose down            # Stop all services
+```
+
+### 2. FastAPI Server Deployment
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Client Applications                 │
+│ (Web, Mobile, Scripts, Batch tool)  │
+└──────────────┬──────────────────────┘
+               │ HTTP REST API
+               ▼
+┌─────────────────────────────────────┐
+│ FastAPI Server (Port 8000)          │
+│                                      │
+│ Endpoints:                           │
+│  /health - Health check              │
+│  /analyze - Full pipeline            │
+│  /analyze/metadata - Agent 1         │
+│  /analyze/quality - Agent 2          │
+│  /analyze/aesthetic - Agent 3        │
+│  /analyze/filter - Agent 4           │
+│  /analyze/caption - Agent 5          │
+│  /docs - Swagger UI                  │
+│  /redoc - ReDoc                      │
+│                                      │
+│ Features:                            │
+│  - API key authentication            │
+│  - CORS enabled                      │
+│  - Auto-generated docs               │
+│  - Async request handling            │
+│  - Background jobs                   │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- 🚀 RESTful API for programmatic access
+- 📚 Auto-generated documentation
+- 🔑 Secure API key authentication
+- 🧪 Easy testing via Swagger UI
+- 🔄 Background job processing
+
+**Usage:**
+```bash
+./scripts/setup_api.sh         # Setup
+./scripts/start_api.sh         # Start server
+./scripts/test_api_server.sh   # Test endpoints
+curl http://localhost:8000/health
+```
+
+### 3. Flask Web UI Deployment
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Browser (User Interface)            │
+└──────────────┬──────────────────────┘
+               │ HTTP
+               ▼
+┌─────────────────────────────────────┐
+│ Flask Web Server (Port 5001)        │
+│                                      │
+│ Routes:                              │
+│  / - Dashboard + Upload              │
+│  /upload - Handle uploads            │
+│  /report/<id> - View results         │
+│  /status/<id> - Poll status          │
+│                                      │
+└──────────────┬──────────────────────┘
+               │ Calls FastAPI
+               ▼
+┌─────────────────────────────────────┐
+│ FastAPI Server (Port 8000)          │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- 📤 Drag-and-drop file upload
+- 📊 Interactive tabbed reports
+- 📈 Real-time progress tracking
+- 🎨 Clean SaaS UI design
+- 🔢 Token usage visualization
+
+**Usage:**
+```bash
+./scripts/start_api.sh         # Start API first
+uv run python web_app/app.py   # Start web UI
+# Visit http://localhost:5001
+```
+
+### 4. CLI Orchestrator Deployment
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Command Line Interface              │
+└──────────────┬──────────────────────┘
+               │ Direct Invocation
+               ▼
+┌─────────────────────────────────────┐
+│ Orchestrator (orchestrator.py)      │
+│  - Loads config.yaml                │
+│  - Initializes all 5 agents         │
+│  - Runs sequential pipeline         │
+│  - Saves JSON reports               │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- 🖥️ Direct local execution
+- 📁 Batch processing from folder
+- 📝 Detailed JSON output
+- 🔍 Full control over config
+
+**Usage:**
+```bash
+uv run python orchestrator.py
+# Results in output/{timestamp}/reports/
+```
+
+### 5. Batch CSV Tool Deployment
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Batch Script (main.py)              │
+│  - Scans folder for images          │
+│  - Calls FastAPI for each image     │
+│  - Collects results                 │
+│  - Exports to CSV                   │
+└──────────────┬──────────────────────┘
+               │ HTTP REST API
+               ▼
+┌─────────────────────────────────────┐
+│ FastAPI Server (Port 8000)          │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- 📊 CSV export for spreadsheets
+- 🔄 Recursive folder scanning
+- 📈 Progress tracking
+- ⚠️ Error logging to separate CSV
+
+**Usage:**
+```bash
+cd batch-run-photo-json2csv
+python main.py /path/to/images output.csv --api-key KEY --recursive
+```
+
+### 6. MCP Server Deployment
+
+**Architecture:**
+```
+┌─────────────────────────────────────┐
+│ Claude Desktop Application          │
+└──────────────┬──────────────────────┘
+               │ MCP Protocol (stdio)
+               ▼
+┌─────────────────────────────────────┐
+│ MCP Server (photo_analysis_server)  │
+│  - Exposes agents as MCP tools      │
+│  - JSON-RPC communication           │
+│  - Direct agent invocation          │
+└─────────────────────────────────────┘
+```
+
+**Benefits:**
+- 🤖 Native Claude Desktop integration
+- 💬 Conversational interface
+- 🔧 No HTTP overhead
+- 🎯 Context-aware analysis
+
+**Usage:**
+```bash
+./scripts/setup_mcp.sh              # Setup
+./scripts/setup_claude_mcp.sh       # Configure Claude Desktop
+# Restart Claude Desktop
+# Use: "Analyze this photo: /path/to/image.jpg"
+```
 
 ---
 
@@ -154,12 +406,14 @@ output = [
 ```
 config.yaml (root configuration)
     │
-    ├─→ paths: input_images, output directories, upload directories
-    ├─→ vertex_ai: project, location, model settings
+    ├─→ paths: input_images, output directories, upload directories, cache
+    ├─→ vertex_ai: project, location, model settings, pricing, optimization
+    ├─→ reverse_geocoding: enabled, caching, timeout, user_agent
     ├─→ agents: per-agent settings (workers, batch_size, timeout)
     ├─→ thresholds: quality/aesthetic minimums
     ├─→ error_handling: retry strategy, continue_on_error
     ├─→ logging: level, format, output paths
+    ├─→ api: host, port, reload settings
     └─→ parallelization: worker allocation per agent
 ```
 
@@ -170,6 +424,44 @@ vertex_ai:
   project: "your-google-cloud-project-id"
   location: "us-central1"  # or your preferred region
   model: "gemini-1.5-flash"
+
+  # Token optimization settings
+  pricing:
+    input_per_1k_tokens: 0.000075   # $0.075 per 1M input tokens
+    output_per_1k_tokens: 0.0003    # $0.30 per 1M output tokens
+
+  optimization:
+    enable_caching: true            # Cache API results
+    max_image_dimension: 1024       # Resize images (reduces tokens)
+    skip_captions_for_rejected: true # Don't caption rejected images
+    use_concise_prompts: true       # Minimize prompt length
+```
+
+### Reverse Geocoding Configuration
+
+```yaml
+reverse_geocoding:
+  enabled: true                     # Enable GPS → location name lookup
+  cache_enabled: true               # Cache results locally
+  cache_ttl_hours: 24              # Cache validity period
+  timeout_seconds: 5               # Request timeout
+  user_agent: "TravelPhotoAnalysis/1.0"  # Required by Nominatim
+```
+
+**Features:**
+- Uses OpenStreetMap's Nominatim service (free!)
+- Converts GPS coordinates to human-readable location names
+- Automatic caching to minimize API calls (stored in `cache/geocoding_cache.json`)
+- Rate limiting (max 1 request/second) to respect Nominatim TOS
+- Falls back gracefully if service unavailable
+
+### API Configuration
+
+```yaml
+api:
+  host: "0.0.0.0"                  # Bind address
+  port: 8000                       # Port for FastAPI server
+  reload: true                     # Auto-reload on code changes (dev only)
 ```
 
 ### Agent-Specific Configuration
@@ -212,7 +504,13 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
 
 ### Flask Application (`web_app/app.py`)
 
+**Architecture Change:** Flask web app now acts as a frontend that calls the FastAPI server instead of running agents directly.
+
 ```python
+# Configuration
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+API_KEY = os.getenv("API_KEY", "your-api-key")
+
 # Key routes
 @app.route('/')
 def index():
@@ -222,10 +520,33 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    """Handle photo upload and trigger workflow."""
+    """Handle photo upload and call FastAPI for analysis."""
     files = request.files.getlist('photos')
-    run_id = save_and_process(files)
+
+    # Save uploaded files
+    upload_dir = save_uploads(files)
+
+    # Process images by calling FastAPI
+    threading.Thread(
+        target=run_workflow_thread,
+        args=(upload_dir,)
+    ).start()
+
     return jsonify({'run_id': run_id, 'status': 'running'})
+
+def run_workflow_thread(input_path):
+    """Call FastAPI server for each image."""
+    for image_file in image_files:
+        # Call FastAPI /analyze endpoint
+        response = requests.post(
+            f"{API_URL}/analyze",
+            files={'file': open(image_file, 'rb')},
+            headers={'X-API-Key': API_KEY}
+        )
+        results.append(response.json())
+
+    # Save results to output directory
+    save_results(results)
 
 @app.route('/report/<timestamp>')
 def view_report(timestamp):
@@ -238,6 +559,13 @@ def check_status(run_id):
     """Poll workflow status."""
     return jsonify({'status': get_run_status(run_id)})
 ```
+
+**Benefits of API-based architecture:**
+- 🔄 Separation of concerns (UI vs. processing)
+- 🚀 Can scale API and UI independently
+- 🔌 Multiple UIs can share same API backend
+- 🧪 Easier testing and development
+- 📊 API can serve web UI, batch tool, and other clients
 
 ### UI Templates
 
